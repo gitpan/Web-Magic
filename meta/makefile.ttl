@@ -1,0 +1,34 @@
+# This file provides instructions for packaging.
+
+@prefix : <http://purl.org/NET/cpan-uri/terms#> .
+
+<http://purl.org/NET/cpan-uri/dist/Web-Magic/project>
+	:perl_version_from _:main ;
+	:version_from _:main ;
+	:readme_from _:main ;
+	:test_requires "Test::More 0.61" ;
+	:requires
+		"common::sense",
+		"namespace::sweep",
+		"Acme::24 0.03",
+		"Carp 0",
+		"HTML::HTML5::Parser 0.100",
+		"HTML::HTML5::Writer 0.100",
+		"JSON::JOM 0.005",
+		"JSON::JOM::Plugins::Dumper 0",
+		"JSON::JOM::Plugins::JsonPath 0",
+		"LWP::UserAgent 0",
+		"Object::Stash 0.001",
+		"PerlX::QuoteOperator 0",
+		"RDF::RDFa::Parser 1.096",
+		"RDF::Trine 0.135",
+		"Scalar::Util 0",
+		"Sub::Name 0",
+		"UNIVERSAL::AUTHORITY 0",
+		"URI 0",
+		"URI::Escape 0",
+		"XML::LibXML 1.70",
+		"YAML::Any 0".
+
+_:main <http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#fileName> "lib/Web/Magic.pm" .
+

@@ -1,0 +1,52 @@
+---
+abstract: 'HTTP dwimmery'
+author:
+  - 'Toby Inkster <tobyink@cpan.org>'
+build_requires:
+  ExtUtils::MakeMaker: 6.42
+  Test::More: 0.61
+configure_requires:
+  ExtUtils::MakeMaker: 6.42
+distribution_type: module
+generated_by: 'Module::Install version 1.02'
+keywords: []
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+module_name: Web::Magic
+name: Web-Magic
+no_index:
+  directory:
+    - examples
+    - inc
+    - t
+    - xt
+requires:
+  Acme::24: 0.03
+  Carp: 0
+  HTML::HTML5::Parser: 0.100
+  HTML::HTML5::Writer: 0.100
+  JSON::JOM: 0.005
+  JSON::JOM::Plugins::Dumper: 0
+  JSON::JOM::Plugins::JsonPath: 0
+  LWP::UserAgent: 0
+  Object::Stash: 0.001
+  PerlX::QuoteOperator: 0
+  RDF::RDFa::Parser: 1.096
+  RDF::Trine: 0.135
+  Scalar::Util: 0
+  Sub::Name: 0
+  UNIVERSAL::AUTHORITY: 0
+  URI: 0
+  URI::Escape: 0
+  XML::LibXML: 1.70
+  YAML::Any: 0
+  common::sense: 0
+  namespace::sweep: 0
+  perl: 5.10.0
+resources:
+  bugtracker: http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic
+  homepage: https://metacpan.org/release/Web-Magic
+  license: http://dev.perl.org/licenses/
+version: 0.001

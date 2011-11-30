@@ -1,0 +1,327 @@
+NAME
+    Web::Magic - HTTP dwimmery
+
+SYNOPSIS
+     use Web::Magic;
+     say Web::Magic->new('http://json-schema.org/card')->{description};
+
+    or
+
+     use Web::Magic -sub => 'W'; 
+     say W('http://json-schema.org/card')->{description};
+
+DESCRIPTION
+    On the surface of it, Web::Magic appears to just perform HTTP requests,
+    but it's more than that. A URL blessed into the Web::Magic package can
+    be interacted with in all sorts of useful ways.
+
+  Constructor
+    "new ([$method,] $uri [, %args])"
+        $method is the HTTP method to use with the URI, such as 'GET',
+        'POST', 'PUT' or 'DELETE'. The HTTP method must be capitalised to
+        avoid it being interpreted by the constructor as a URI. It defaults
+        to 'GET'.
+
+        The URI should be an HTTP or HTTPS URL. Other URI schemes may work
+        to varying degress of success.
+
+        The %args hash is a convenience for constructing HTTP query strings.
+        Hash values should be scalars, or at least overload stringification.
+        The following are all equivalent...
+
+         Web::Magic->new(GET => 'http://www.google.com/search', q => 'kittens');
+         Web::Magic->new('http://www.google.com/search', q => 'kittens');
+         Web::Magic->new(GET => 'http://www.google.com/search?q=kittens');
+         Web::Magic->new('http://www.google.com/search?q=kittens');
+
+  Export
+    You can import a sub to act as a shortcut for the constructor.
+
+     use Web::Magic -sub => 'W';
+     W(GET => 'http://www.google.com/search', q => 'kittens');
+     W('http://www.google.com/search', q => 'kittens');
+     W(GET => 'http://www.google.com/search?q=kittens');
+     W('http://www.google.com/search?q=kittens');
+
+  Pre-Request Methods
+    Constructing a Web::Magic object doesn't actually perform a request for
+    the URI. Web::Magic defers requesting the URI until the last possible
+    moment. (Which in some cases will be when it slips out of scope, or even
+    not at all.)
+
+    Pre-request methods are those that can be called before the request is
+    made. Unless otherwise noted they will not themselves trigger the
+    request to be made. Unless otherwise noted, they return a reference to
+    the Web::Magic object itself, so can be chained:
+
+      my $magic = Web::Magic
+        ->new(GET => 'http://www.google.com/')
+        ->User_Agent('MyBot/0.1')
+        ->Accept('text/html');
+
+    The following methods are pre-request.
+
+    "set_request_method($method, [$body])"
+        Sets the HTTP request method (e.g. 'GET' or 'POST'). You can
+        optionally set the HTTP request body at the same time.
+
+        As a shortcut, you can use the method name as an object method. That
+        is, the following are equivalent:
+
+          $magic->set_request_method(POST => $body);
+          $magic->POST($body);
+
+        Using the latter technique, methods need to conform to this regular
+        expression: "/^[A-Z][A-Z0-9]{0,19}$/".
+
+        This will throw an error if called on a Web::Magic object that has
+        already been requested.
+
+    "set_request_header($header, $value)"
+        Sets an HTTP request header (e.g. 'User-Agent').
+
+        As a shortcut, you can use the header name as an object method,
+        substituting hyphens for underscores. That is, the following are
+        equivalent:
+
+          $magic->set_request_header('User-Agent', 'MyBot/0.1');
+          $magic->User_Agent('MyBot/0.1');
+
+        Using the latter technique, methods need to begin with a capital
+        letter and contain at least one lower-case letter.
+
+        This will throw an error if called on a Web::Magic object that has
+        already been requested.
+
+    "set_request_body($body)"
+        Sets the body for a POST, PUT or other request that needs a body.
+
+        $body may be a string, but can be a hash or array reference, an
+        XML::LibXML::Document or an RDF::Trine::Model, in which case they'll
+        be serialised appropriately based on the Content-Type header of the
+        request.
+
+          my $magic = W('http://www.example.com/document-submission')
+            ->POST
+            ->set_request_body($document_dom)
+            ->Content_Type('text/html');
+
+        Yes, that's right. Even though the content-type is set *after* the
+        body, it is still serialised appropriately. This is because
+        serialisation is deferred until just before the request is made.
+
+        This will throw an error if called on a Web::Magic object that has
+        already been requested.
+
+    "cancel"
+        This method may be called to show you do not intend for this object
+        to be requested. Attempting to request an object that has been
+        cancelled will throw an exception.
+
+          my $magic = W('http://www.google.com/');
+          $magic->cancel;
+          $magic->do_request; # throws
+
+        Why is this needed? Because even if you don't explicitly call
+        "do_request", the request will be made implicitly in some cases.
+        "cancel" allows you to avoid the implicit request.
+
+        This will throw an error if called on a Web::Magic object that has
+        already been requested.
+
+    "do_request"
+        Actually performs the HTTP request. You rarely need to call this
+        method implicitly, as calling any Post-Request method will
+        automatically call "do_request".
+
+        "do_request" will be called automatically (via "DESTROY") on any
+        Web::Magic object that gets destroyed (e.g. goes out of scope)
+        unless the request has been cancelled, or the request is unlikely to
+        have had side-effects (i.e. its method is 'GET', 'HEAD', 'OPTIONS',
+        'TRACE' or 'SEARCH').
+
+        This will throw an error if called on a Web::Magic object that has
+        been cancelled.
+
+  Post-Request Methods
+    The following methods can be called after a request has been made, and
+    will implicitly call "do_request" if called on an object which has not
+    yet been requested.
+
+    These do not typically return a reference to the invocant Web::Magic
+    object, so cannot always easily be chained.
+
+    "response"
+        The response, as an HTTP::Response object.
+
+    "content"
+        The response, as a string.
+
+    "to_hashref"
+        Parses the response body as JSON or YAML (depending on Content-Type
+        header) and returns the result as a hashref (or arrayref).
+
+        Actually, technically it returns an JSON::JOM object which can be
+        accessed as if it were a hashref or arrayref.
+
+        When a Web::Magic object is accessed as a hashref, this implicitly
+        calls "to_hashref". So the following are equivalent:
+
+          W('http://example.com/data')->to_hashref->{people}[0]{name};
+          W('http://example.com/data')->{people}[0]{name};
+
+        When "to_hashref" is called on an unrequested Web::Magic object, it
+        implicitly sets the HTTP Accept header to include JSON and YAML
+        unless the Accept header has already been set.
+
+    "to_dom"
+        Parses the response body as XML or HTML (depending on Content-Type
+        header) and returns the result as an XML::LibXML::Document.
+
+        When "to_dom" is called on an unrequested Web::Magic object, it
+        implicitly sets the HTTP Accept header to include XML and HTML
+        unless the Accept header has already been set.
+
+        Additionally, the following methods can be called which implicitly
+        call "to_dom": getElementsByTagName getElementsByTagNameNS
+        getElementsByLocalName getElementsById documentElement cloneNode
+        firstChild lastChild findnodes find findvalue exists childNodes
+        attributes getNamespaces. So, for example, the following are
+        equivalent:
+
+          W('http://example.com/')->to_dom->getElementsByTagName('title');
+          W('http://example.com/')->getElementsByTagName('title');
+
+    "to_model"
+        Parses the response body as RDF/XML, Turtle, RDF/JSON or RDFa
+        (depending on Content-Type header) and returns the result as an
+        RDF::Trine::Model.
+
+        When "to_model" is called on an unrequested Web::Magic object, it
+        implicitly sets the HTTP Accept header to include RDF/XML and Turtle
+        unless the Accept header has already been set.
+
+        Additionally, the following methods can be called which implicitly
+        call "to_model": subjects predicates objects
+        objects_for_predicate_list get_pattern get_statements
+        count_statements get_sparql as_stream. So, for example, the
+        following are equivalent:
+
+          W('http://example.com/')->to_model->get_pattern($pattern);
+          W('http://example.com/')->get_pattern($pattern);
+
+    "to_feed"
+        Parses the response body as Atom or RSS (depending on Content-Type
+        header) and returns the result as an XML::Feed.
+
+        When "to_feed" is called on an unrequested Web::Magic object, it
+        implicitly sets the HTTP Accept header to include Atom and RSS
+        unless the Accept header has already been set.
+
+        Additionally, the following methods can be called which implicitly
+        call "to_feed": entries. So, for example, the following are
+        equivalent:
+
+          W('http://example.com/')->to_feed->entries;
+          W('http://example.com/')->entries;
+
+  Any Time Methods
+    These can be called either before or after the request, and do not
+    trigger the request to be made. They do not usually return the invocant
+    Web::Magic object, so are not usually suitable for chaning.
+
+    "uri"
+        Returns the original URI, as a URI object.
+
+        Additionally, the following methods can be called which implicitly
+        call "uri": scheme authority path query host port. So, for example,
+        the following are equivalent:
+
+          W('http://example.com/')->uri->host;
+          W('http://example.com/')->host;
+
+    "is_requested"
+        Returns true if the invocant has already been requested.
+
+    "is_cancelled"
+        Returns true if the invocant has been cancelled.
+
+    "assert_response($name, $coderef)"
+        Checks an assertion about the HTTP response. Web::Magic will
+        blithely allow you to call to_hashref on a non-JSON/YAML response,
+        or getElementsByTagName on an HTTP error page. This may not be what
+        you want. "assert_response" allows you to check things are as
+        expected before continuing, croaking otherwise.
+
+        $coderef should be a subroutine that accepts an HTTP::Response, and
+        returns true if everything is OK, and false if something bad has
+        happened. $name is just a label for the assertion, to provide a more
+        helpful error message if the assertion fails.
+
+          print W('http://example.com/data.json')
+            ->assert_response(correct_type => sub { (shift)->content_type =~ /json/i })
+            ->{people}[0]{name};
+
+        An assertion can be made at any time. If made before the request,
+        then it is queued up for checking later. If the assertion is made
+        after the request, it is checked immediately.
+
+        This method returns the invocant, so may be chained.
+
+    "assert_success"
+        A shortcut for:
+
+          assert_response(success => sub { (shift)->is_success })
+
+        This checks the HTTP response has a 2XX HTTP status code.
+
+    "has_response_assertions"
+        Returns true if the Web::Magic object has had any response
+        assertions made. (In fact, returns the number of such assertions.)
+
+    "user_agent"
+        Returns the LWP::UserAgent that will be used (or has been used) to
+        issue the request.
+
+    "acme_24"
+        Returns the string 'Acme::24'.
+
+        Additionally, the following methods can be called which implicitly
+        call "acme_24": random_jackbauer_fact. So, for example, the
+        following are equivalent:
+
+          W('http://example.com/')->acme_24->random_jackbauer_fact;
+          W('http://example.com/')->random_jackbauer_fact;
+
+        This method exists to emphasize the whimsical and experimental
+        status of the current release of Web::Magic. If Web::Magic ever
+        becomes ready for serious production use, expect the following to
+        evaluate to false:
+
+          W('http://example.com/')->can('random_jackbauer_fact')
+
+BUGS
+    Inumerable, almost certainly.
+
+    Have a go at enumerating them here:
+    <http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic>.
+
+SEE ALSO
+    LWP::UserAgent, URI, HTTP::Request, HTTP::Response.
+
+    XML::LibXML, JSON::JOM, RDF::Trine, XML::Feed.
+
+AUTHOR
+    Toby Inkster <tobyink@cpan.org>.
+
+COPYRIGHT AND LICENCE
+    This software is copyright (c) 2011 by Toby Inkster.
+
+    This is free software; you can redistribute it and/or modify it under
+    the same terms as the Perl 5 programming language system itself.
+
+DISCLAIMER OF WARRANTIES
+    THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+    WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+    MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+
