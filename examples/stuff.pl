@@ -17,5 +17,6 @@ say W(q{ http://www.cpantesters.org/distro/R/RDF-Query-Client.yaml })
 	->[0]
 	->dump;
 	
+say W(q{ http://json-schema.org/ });
 say Web::Magic->random_jackbauer_fact;
 say Web::Magic->random_jackbauer_factq;

@@ -43,6 +43,15 @@ DESCRIPTION
      W(GET => 'http://www.google.com/search?q=kittens');
      W('http://www.google.com/search?q=kittens');
 
+    There is experimental support for a quote-like operator similar to "q()"
+    or "qq()":
+
+     use Web::Magic -quotelike => 'qW';
+     qW(http://www.google.com/search?q=kittens);
+
+    But it doesn't always behave as expected. (See
+    <https://rt.cpan.org/Ticket/Display.html?id=72822>.)
+
   Pre-Request Methods
     Constructing a Web::Magic object doesn't actually perform a request for
     the URI. Web::Magic defers requesting the URI until the last possible
@@ -155,7 +164,13 @@ DESCRIPTION
         The response, as an HTTP::Response object.
 
     "content"
-        The response, as a string.
+        The response body, as a string.
+
+        Web::Magic overloads stringification calling this method. Thus:
+
+          print W('http://www.example.com/');
+
+        will print the body of 'http://www.example.com/'.
 
     "to_hashref"
         Parses the response body as JSON or YAML (depending on Content-Type
@@ -239,6 +254,15 @@ DESCRIPTION
 
           W('http://example.com/')->uri->host;
           W('http://example.com/')->host;
+
+        If you need a copy of the URI as a string, two methods are:
+
+          my $magic = W('http://example.com/');
+          my $str_1 = $magic->uri->as_string;
+          my $str_2 = $$magic;
+
+        The former perhaps makes for easier to read code; the latter is
+        maybe slightly faster code.
 
     "is_requested"
         Returns true if the invocant has already been requested.

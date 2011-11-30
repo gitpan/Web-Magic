@@ -31,7 +31,7 @@ requires:
   JSON::JOM::Plugins::Dumper: 0
   JSON::JOM::Plugins::JsonPath: 0
   LWP::UserAgent: 0
-  Object::Stash: 0.001
+  Object::Stash: 0.002
   PerlX::QuoteOperator: 0
   RDF::RDFa::Parser: 1.096
   RDF::Trine: 0.135
@@ -49,4 +49,4 @@ resources:
   bugtracker: http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic
   homepage: https://metacpan.org/release/Web-Magic
   license: http://dev.perl.org/licenses/
-version: 0.001
+version: 0.002

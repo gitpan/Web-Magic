@@ -15,3 +15,16 @@ dist:v_0-001
 	:file-release   <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Web-Magic-0.001.tar.gz> ;
 	rdfs:label      "Initial release" .
 
+dist:project :release dist:v_0-002 .
+dist:v_0-002
+	a               :Version ;
+	dc:issued       "2011-11-30"^^xsd:date ;
+	:revision       "0.002"^^xsd:string ;
+	:file-release   <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Web-Magic-0.002.tar.gz> ;
+	dcs:changeset [
+		dcs:versus dist:v_0-001 ;
+		dcs:item   [ rdfs:label "Overload stringification to return HTTP response body."@en ] ;
+		dcs:item   [ rdfs:label "Explain how to get back the URI as a string."@en ; a dcs:Documentation ] ;
+		dcs:item   [ rdfs:label "Document the quote-like operator feature."@en ; a dcs:Documentation ]
+		] .
+

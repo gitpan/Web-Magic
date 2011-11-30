@@ -7,7 +7,7 @@ use utf8;
 
 BEGIN {
 	$Web::Magic::AUTHORITY = 'cpan:TOBYINK';
-	$Web::Magic::VERSION   = '0.001';
+	$Web::Magic::VERSION   = '0.002';
 }
 
 use Acme::24 0.03                  qw//; 
@@ -18,7 +18,7 @@ use JSON::JOM 0.005                qw/from_json to_jom to_json/;
 use JSON::JOM::Plugins::Dumper 0   qw//;
 use JSON::JOM::Plugins::JsonPath 0 qw//;
 use LWP::UserAgent 0               qw//;
-use Object::Stash 0.001            qw/_stash/;
+use Object::Stash 0.002            qw/_stash/;
 use PerlX::QuoteOperator 0         qw//;
 use RDF::RDFa::Parser 1.096        qw//;
 use RDF::Trine 0.135               qw//;
@@ -31,9 +31,9 @@ use XML::LibXML 1.70               qw//;
 use YAML::Any 0                    qw/Load Dump/;
 
 use overload
-	'%{}' => \&to_hashref,
-	'@{}' => \&to_hashref,
-	'""'  => sub { ${$_[0]} },
+	'%{}'  => \&to_hashref,
+	'@{}'  => \&to_hashref,
+	'""'   => \&content,
 	;
 
 my %F;
@@ -551,6 +551,15 @@ You can import a sub to act as a shortcut for the constructor.
  W(GET => 'http://www.google.com/search?q=kittens');
  W('http://www.google.com/search?q=kittens');
 
+There is experimental support for a quote-like operator similar to
+C<< q() >> or C<< qq() >>:
+
+ use Web::Magic -quotelike => 'qW';
+ qW(http://www.google.com/search?q=kittens);
+
+But it doesn't always behave as expected.
+(See L<https://rt.cpan.org/Ticket/Display.html?id=72822>.)
+
 =head2 Pre-Request Methods
 
 Constructing a Web::Magic object doesn't actually perform a request
@@ -677,7 +686,13 @@ The response, as an L<HTTP::Response> object.
 
 =item C<< content >>
 
-The response, as a string.
+The response body, as a string.
+
+Web::Magic overloads stringification calling this method. Thus:
+
+  print W('http://www.example.com/');
+
+will print the body of 'http://www.example.com/'.
 
 =item C<< to_hashref >>
 
@@ -769,6 +784,15 @@ the following are equivalent:
 
   W('http://example.com/')->uri->host;
   W('http://example.com/')->host;
+
+If you need a copy of the URI as a string, two methods are:
+
+  my $magic = W('http://example.com/');
+  my $str_1 = $magic->uri->as_string;
+  my $str_2 = $$magic;
+
+The former perhaps makes for easier to read code; the latter is maybe
+slightly faster code.
 
 =item C<< is_requested >>
 
