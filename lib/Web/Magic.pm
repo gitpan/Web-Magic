@@ -7,7 +7,7 @@ use utf8;
 
 BEGIN {
 	$Web::Magic::AUTHORITY = 'cpan:TOBYINK';
-	$Web::Magic::VERSION   = '0.002';
+	$Web::Magic::VERSION   = '0.003';
 }
 
 use Acme::24 0.03                  qw//; 

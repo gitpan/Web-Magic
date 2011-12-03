@@ -28,3 +28,14 @@ dist:v_0-002
 		dcs:item   [ rdfs:label "Document the quote-like operator feature."@en ; a dcs:Documentation ]
 		] .
 
+dist:project :release dist:v_0-003 .
+dist:v_0-003
+	a               :Version ;
+	dc:issued       "2011-12-03"^^xsd:date ;
+	:revision       "0.003"^^xsd:string ;
+	:file-release   <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Web-Magic-0.003.tar.gz> ;
+	dcs:changeset [
+		dcs:versus dist:v_0-002 ;
+		dcs:item   [ rdfs:label "Use newer Module::Package::RDF."@en ; a dcs:Packaging ]
+		] .
+

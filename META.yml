@@ -49,4 +49,4 @@ resources:
   bugtracker: http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic
   homepage: https://metacpan.org/release/Web-Magic
   license: http://dev.perl.org/licenses/
-version: 0.002
+version: 0.003
