@@ -14,13 +14,14 @@ not run its Makefile.PL or Build.PL.
 -----BEGIN PGP SIGNED MESSAGE-----
 Hash: SHA1
 
-SHA1 79efdb56bee15d0851acf967eb3f5006655b3db9 Changes
-SHA1 f3296a09eb07898f3ba6dd0ece615dafc1b57e16 LICENSE
-SHA1 ca84aac2a6a0c4d3ebca2f64abc6874391e4c924 MANIFEST
-SHA1 e4afb3cf294de72bdf567717a33dddf0adb0cfaf META.yml
+SHA1 b8e996bdeac3c3d73bf1652b6f2588967fa1995e Changes
+SHA1 1d54db0b8134eb1c8ea0cee400f9dc612bcaa61a LICENSE
+SHA1 59678279ef7301f0cd1976f9f6d8eee51c972740 MANIFEST
+SHA1 cde12e3467f03f801d378be6dacc5aab9c32b9ec META.yml
 SHA1 80519f46cf4d005b59c73d680d3f90aef176d9bd Makefile.PL
-SHA1 1c82926a91169ec8dde380ad403f19d3db3ded5a README
-SHA1 563fddbf36ab1b0abb32c5690d2726760328447c examples/stuff.pl
+SHA1 ae5810d9e1e6e3c5a97328573f321a027e216b1f README
+SHA1 d6abb2308fe8ecc4b0301d268771e0605e0e90e9 examples/assert.pl
+SHA1 7827d31f292091767c78d30e39fafcd5e8542bbd examples/stuff.pl
 SHA1 5d94bc10deff1dd74e4bc5dfa6fc015e39271f15 inc/Module/AutoInstall.pm
 SHA1 40106479d4e07f379cb82ca1d69fca92e3a40f47 inc/Module/Install.pm
 SHA1 34a24a530ecf0365cc02e4150b06c9bed702a441 inc/Module/Install/AutoInstall.pm
@@ -40,15 +41,15 @@ SHA1 6b807287940754cc31a3db59f2b22e363d5525be inc/Module/Package/Dist/RDF.pm
 SHA1 775bd24f2fdbb6dce51a8b5b0cdb01fccfce83c4 inc/Scalar/Util.pm
 SHA1 b1b664983568bf822c327599eb88e223483ae96a inc/Scalar/Util/PP.pm
 SHA1 eef6bff62046bff2ce08ba132d0b58fba30f40b4 inc/YAML/Tiny.pm
-SHA1 e769828d941fbf6161e40c46a251fcfe2cb61047 lib/Web/Magic.pm
-SHA1 23e2e39bd792b44c8a9dad657255d7d7ee1650ff meta/changes.ttl
+SHA1 327853c34ae14229f68507d0594b60598f42eb55 lib/Web/Magic.pm
+SHA1 bb82695a343694ac24804e8bbc4ab365efa2bf60 meta/changes.ttl
 SHA1 61d5ba4e60fc0a075f79d4cce4513e1f8fef5d73 meta/doap.ttl
-SHA1 3ce77513f0d292cb2462f845e7cebf001c65f16d meta/makefile.ttl
+SHA1 e2214ecec829ca1bf655f066c86d820b2ae35795 meta/makefile.ttl
 SHA1 7dcb1e3144b09fb359fed7ac27133a953175379e t/01basic.t
 -----BEGIN PGP SIGNATURE-----
 Version: GnuPG v1.4.10 (GNU/Linux)
 
-iEYEARECAAYFAk7aUYgACgkQzr+BKGoqfTlElACcDx73hwu4VsL3KcsH2dWlXctJ
-NSMAoKjEzi298Re6U0atxiQSSZNT+JTe
-=YQy0
+iEYEARECAAYFAk8Biq4ACgkQzr+BKGoqfTnYuwCfWd1vO/Z20zN1D1dBFCOQv3K2
+bh4An1ElpKENC9WsL671qbkcTmQuLyNc
+=p9sx
 -----END PGP SIGNATURE-----

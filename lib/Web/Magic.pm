@@ -7,7 +7,7 @@ use utf8;
 
 BEGIN {
 	$Web::Magic::AUTHORITY = 'cpan:TOBYINK';
-	$Web::Magic::VERSION   = '0.003';
+	$Web::Magic::VERSION   = '0.004';
 }
 
 use Acme::24 0.03                  qw//; 
@@ -19,12 +19,12 @@ use JSON::JOM::Plugins::Dumper 0   qw//;
 use JSON::JOM::Plugins::JsonPath 0 qw//;
 use LWP::UserAgent 0               qw//;
 use Object::Stash 0.002            qw/_stash/;
-use PerlX::QuoteOperator 0         qw//;
+use PerlX::QuoteOperator 0.04      qw//;
 use RDF::RDFa::Parser 1.096        qw//;
 use RDF::Trine 0.135               qw//;
 use Scalar::Util 0                 qw/blessed/;
 use Sub::Name 0                    qw/subname/;
-use UNIVERSAL::AUTHORITY 0         qw//;
+use Object::AUTHORITY 0            qw//;
 use URI 0                          qw//;
 use URI::Escape 0                  qw//;
 use XML::LibXML 1.70               qw//;
@@ -50,10 +50,19 @@ BEGIN {
 			get_pattern get_statements count_statements get_sparql as_stream/;
 	$F{$_} = 'to_feed'
 		foreach qw/entries/;
+	$F{$_} = 'response'
+		foreach qw/headers/;
+	$F{$_} = 'headers'
+		foreach qw/header/;
 	$F{$_} = 'uri'
 		foreach qw/scheme authority path query host port/;
 	$F{$_} = 'acme_24'
 		foreach qw/random_jackbauer_fact/;
+}
+
+sub AUTHORITY
+{
+	goto &Object::AUTHORITY::AUTHORITY;
 }
 
 sub import
@@ -61,17 +70,18 @@ sub import
 	my ($class, %args) = @_;
 	
 	my $caller = caller;
-	my $code   = sub ($) { __PACKAGE__->new(@_); };
 	
 	if ($args{-quotelike})
 	{
+		my $code   = sub ($) { __PACKAGE__->new(@_); };
+		
 		$args{-quotelike} = [ $args{-quotelike} ]
 			unless ref $args{-quotelike};
 		
 		my $ctx    = PerlX::QuoteOperator->new;
 		$ctx->import(
 			$_,
-			{ -emulate => 'qq', -with => $code, },
+			{ -emulate => 'qq', -with => $code, -parser => 1},
 			$caller,
 			)
 			foreach @{ $args{-quotelike} };
@@ -79,6 +89,8 @@ sub import
 	
 	if ($args{-sub})
 	{
+		my $code   = sub ($;$%) { __PACKAGE__->new(@_); };
+		
 		$args{-sub} = [ $args{-sub} ]
 			unless ref $args{-sub};
 		
@@ -159,7 +171,7 @@ sub set_request_method
 {
 	my ($self, @args) = @_;
 	croak "Cannot set request method on already requested resource"
-		if @args && $self->_already_requested;
+		if @args && $self->is_requested;
 	$self->_request_object->method(uc $args[0]);
 	$self->set_request_body($args[1]) if exists $args[1];
 	return $self;
@@ -168,7 +180,7 @@ sub set_request_method
 sub set_request_body
 {
 	my ($self, $body) = @_;
-	if ($self->_already_requested)
+	if ($self->is_requested)
 	{
 		croak "Cannot set request body on already requested resource";
 	}
@@ -179,22 +191,28 @@ sub set_request_header
 {
 	my ($self, @args) = @_;
 	croak "Cannot set request header on already requested resource"
-		if exists $args[1] && $self->_already_requested;
+		if exists $args[1] && $self->is_requested;
 	$self->_request_object->header(@args);
 	return $self;
+}
+
+sub _ua_string
+{
+	my $proto = shift;
+	my $class = ref $proto // $proto;
+	
+	sprintf('%s/%s (%s) ',
+		$class,
+		$class->VERSION,
+		$class->AUTHORITY,
+		)
 }
 
 sub user_agent
 {
 	my ($self) = @_;
 	my $stash = $self->_stash;
-	$stash->{user_agent} //= LWP::UserAgent->new(agent =>
-		sprintf('%s/%s (%s) ',
-			__PACKAGE__,
-			__PACKAGE__->VERSION,
-			__PACKAGE__->AUTHORITY,
-			)
-		);
+	$stash->{user_agent} //= LWP::UserAgent->new(agent => $self->_ua_string);
 	$stash->{user_agent};
 }
 
@@ -206,13 +224,103 @@ sub _request_object
 	$stash->{request};
 }
 
-sub _already_requested
+sub _final_request_object
+{
+	my ($self, %extra_headers) = @_;
+	
+	my $req = $self->_request_object;
+#	return $req if $self->is_requested;
+
+	if (%extra_headers)
+	{
+		while (my ($h, $v) = each %extra_headers)
+		{
+			$req->header($h => $v) unless $req->header($h);
+		}
+	}
+	
+	if (defined (my $body = $self->_stash->{request_body}))
+	{
+		my $success;
+		if (!ref $body)
+		{
+			$req->content($body);
+			$success++;
+		}
+		elsif (blessed $body and $body->isa('RDF::Trine::Model'))
+		{
+			my $ser;
+			given ( $req->content_type//'xml' )
+			{
+				when (/xml/)     { $ser = RDF::Trine::Serializer::RDFXML->new }
+				when (/turtle/)  { $ser = RDF::Trine::Serializer::Turtle->new }
+				when (/plain/)   { $ser = RDF::Trine::Serializer::NTriples->new }
+				when (/json/)    { $ser = RDF::Trine::Serializer::RDFJSON->new }
+			}
+			if ($ser)
+			{
+				$req->content($ser->serialize_model_to_string($body));
+				$req->content_type('application/rdf+xml')
+					unless $req->content_type;
+				$success++;
+			}
+		}
+		elsif (blessed $body and $body->isa('XML::LibXML::Document'))
+		{
+			my $ser;
+			given ( $req->content_type//'xml' )
+			{
+				when (/xml/)     { $ser = $body->toString }
+				when (/html/)    { $ser = HTML::HTML5::Writer->new->document($body) }
+			}
+			if ($ser)
+			{
+				$req->content($ser);
+				$req->content_type('application/xml')
+					unless $req->content_type;
+				$success++;
+			}
+		}
+		elsif (ref $body and ($req->content_type//'') =~ /json/i)
+		{
+			$req->content(to_json($body));
+			$success++;
+		}
+		elsif (ref $body and ($req->content_type//'') =~ /yaml/i)
+		{
+			$req->content(Dump $body);
+			$success++;
+		}
+		elsif (ref $body eq 'HASH' and ($req->content_type//'www-form-urlencoded') =~ /www-form-urlencoded/i)
+		{
+			my $axwwfue = join '&', map { sprintf('%s=%s', $_, $body->{$_}) } keys %$body;
+			$req->content($axwwfue);
+			$success++;
+		}
+	}
+	
+	return $req;
+}
+
+sub is_requested
 {
 	my ($self) = @_;
 	return exists $self->_stash->{response};
 }
 
-*is_requested = \&_already_requested;
+sub _check_assertions
+{
+	my ($self, $response, @assertions) = @_;
+	
+	foreach my $assertion (@assertions)
+	{
+		my ($name, $code) = @$assertion;
+		$_ = $response;
+		croak "Response assertion '$name' failed for '$$self'" unless $code->($self);
+	}
+
+	return $self;
+}
 
 sub do_request
 {
@@ -223,87 +331,13 @@ sub do_request
 		croak "Need to perform HTTP request, but it is cancelled.";
 	}
 	
-	unless ($self->_already_requested)
+	unless ($self->is_requested)
 	{
-		my $req = $self->_request_object;
-		
-		if (%extra_headers)
-		{
-			while (my ($h, $v) = each %extra_headers)
-			{
-				$req->header($h => $v) unless $req->header($h);
-			}
-		}
-		
-		if (defined (my $body = $self->_stash->{request_body}))
-		{
-			my $success;
-			if (!ref $body)
-			{
-				$req->content($body);
-				$success++;
-			}
-			elsif (blessed $body and $body->isa('RDF::Trine::Model'))
-			{
-				my $ser;
-				given ( $req->content_type//'xml' )
-				{
-					when (/xml/)     { $ser = RDF::Trine::Serializer::RDFXML->new }
-					when (/turtle/)  { $ser = RDF::Trine::Serializer::Turtle->new }
-					when (/plain/)   { $ser = RDF::Trine::Serializer::NTriples->new }
-					when (/json/)    { $ser = RDF::Trine::Serializer::RDFJSON->new }
-				}
-				if ($ser)
-				{
-					$req->content($ser->serialize_model_to_string($body));
-					$req->content_type('application/rdf+xml')
-						unless $req->content_type;
-					$success++;
-				}
-			}
-			elsif (blessed $body and $body->isa('XML::LibXML::Document'))
-			{
-				my $ser;
-				given ( $req->content_type//'xml' )
-				{
-					when (/xml/)     { $ser = $body->toString }
-					when (/html/)    { $ser = HTML::HTML5::Writer->new->document($body) }
-				}
-				if ($ser)
-				{
-					$req->content($ser);
-					$req->content_type('application/xml')
-						unless $req->content_type;
-					$success++;
-				}
-			}
-			elsif (ref $body and ($req->content_type//'') =~ /json/i)
-			{
-				$req->content(to_json($body));
-				$success++;
-			}
-			elsif (ref $body and ($req->content_type//'') =~ /yaml/i)
-			{
-				$req->content(Dump $body);
-				$success++;
-			}
-			elsif (ref $body eq 'HASH' and ($req->content_type//'www-form-urlencoded') =~ /www-form-urlencoded/i)
-			{
-				my $axwwfue = join '&', map { sprintf('%s=%s', $_, $body->{$_}) } keys %$body;
-				$req->content($axwwfue);
-				$success++;
-			}
-		}
-		
+		my $req      = $self->_final_request_object(%extra_headers);
 		my $response = $self->user_agent->request($req);
 		
-		foreach my $assertion (@{ $self->_stash->{assert_response} // [] })
-		{
-			my ($name, $code) = @$assertion;
-			croak "Response assertion '$name' failed" unless $code->($response, $self);
-		}
-		
-		$self->_stash->{response} = $response;
+		$self->_stash(response => $response);
+		$self->_check_assertions($response, @{ $self->_stash->{assert_response} // [] });
 	}
 	
 	return $self;
@@ -312,19 +346,22 @@ sub do_request
 sub assert_response
 {
 	my ($self, $name, $code) = @_;
-	push @{ $self->_stash->{assert_response} // [] }, [$name, $code];
-	if ($self->_already_requested)
+	
+	$self->_stash->{assert_response} = [] unless defined $self->_stash->{assert_response};
+	push @{ $self->_stash->{assert_response} }, [$name => $code];
+	
+	if ($self->is_requested)
 	{
-		my $response = $self->_response_object;
-		croak "Response assertion '$name' failed" unless $code->($response, $self);
+		return $self->_check_assertions($self->response, [$name => $code]);
 	}
+	
 	return $self;
 }
 
 sub assert_success
 {
 	my ($self) = @_;
-	return $self->assert_response(success => sub { (shift)->is_success });
+	return $self->assert_response(success => sub { $_->is_success });
 }
 
 sub has_response_assertions
@@ -333,18 +370,11 @@ sub has_response_assertions
 	scalar @{ $self->_stash->{assert_response} // [] };
 }
 
-sub _response_object
+sub response
 {
 	my ($self, %extra_headers) = @_;
 	$self->do_request(%extra_headers);
 	$self->_stash->{response};
-}
-
-sub response
-{
-	my ($self, %extra_headers) = @_;
-	my $response = $self->_response_object(%extra_headers);
-	return $response;
 }
 
 sub to_hashref
@@ -354,19 +384,19 @@ sub to_hashref
 	
 	unless (exists $stash->{hashref})
 	{
-		my $response = $self->response(Accept => 'application/json, application/yaml, text/yaml');
+		$self->do_request(Accept => 'application/json, application/yaml, text/yaml');
 		
-		if ($response->content_type =~ /json/i)
+		if ($self->headers->content_type =~ /json/i)
 		{
-			$stash->{hashref} = from_json($response->decoded_content);
+			$stash->{hashref} = from_json($self->response->decoded_content);
 		}
-		elsif ($response->content_type =~ /yaml/i)
+		elsif ($self->headers->content_type =~ /yaml/i)
 		{
-			$stash->{hashref} = to_jom(Load($response->decoded_content));
+			$stash->{hashref} = to_jom(Load($self->response->decoded_content));
 		}
 		else
 		{
-			croak "Can't treat this media type as a hashref: ".$response->content_type;
+			croak "Can't treat this media type as a hashref: ".$self->headers->content_type;
 		}
 	}
 	
@@ -380,21 +410,21 @@ sub to_dom
 	
 	unless (exists $stash->{dom})
 	{
-		my $response = $self->response(Accept => 'application/xml, text/xml, application/atom+xml, application/xhtml+xml, text/html');
+		$self->do_request(Accept => 'application/xml, text/xml, application/atom+xml, application/xhtml+xml, text/html');
 		
-		if ($response->content_type =~ m{^text/html}i)
+		if ($self->headers->content_type =~ m{^text/html}i)
 		{
 			$stash->{dom} = HTML::HTML5::Parser
-				->new->parse_string($response->decoded_content);
+				->new->parse_string($self->response->decoded_content);
 		}
-		elsif ($response->content_type =~ m{xml}i)
+		elsif ($self->headers->content_type =~ m{xml}i)
 		{
 			$stash->{dom} = XML::LibXML
-				->new->parse_string($response->decoded_content);
+				->new->parse_string($self->response->decoded_content);
 		}
 		else
 		{
-			croak "Can't treat this media type as a DOM: ".$response->content_type;
+			croak "Can't treat this media type as a DOM: ".$self->response->content_type;
 		}
 	}
 	
@@ -408,12 +438,12 @@ sub to_model
 	
 	unless (exists $stash->{model})
 	{
-		my $response = $self->response(Accept => 'application/rdf+xml, text/turtle, application/xhtml+xml;q=0.1');
+		$self->do_request(Accept => 'application/rdf+xml, text/turtle, application/xhtml+xml;q=0.1');
 		
-		if (defined RDF::RDFa::Parser::Config->host_from_media_type($response->content_type))
+		if (defined RDF::RDFa::Parser::Config->host_from_media_type($self->headers->content_type))
 		{
 			$stash->{model} = RDF::RDFa::Parser
-				->new_from_url($response)
+				->new_from_url($self->response)
 				->graph;
 		}
 		else
@@ -421,10 +451,10 @@ sub to_model
 			my $model = RDF::Trine::Model->new;
 			
 			RDF::Trine::Parser
-				->parser_by_media_type($response->content_type)
+				->parser_by_media_type($self->headers->content_type)
 				->parse_into_model(
-					($response->base//$$self),
-					$response->decoded_content,
+					($self->response->base//$$self),
+					$self->response->decoded_content,
 					$model,
 					);
 			$stash->{model} = $model;
@@ -464,7 +494,7 @@ sub uri
 sub cancel
 {
 	my ($self) = @_;
-	croak "Tried to cancel an already submitted request" if $self->_already_requested;
+	croak "Tried to cancel an already submitted request" if $self->is_requested;
 	$self->_stash->{cancel_request}++;
 	return $self;
 }
@@ -484,7 +514,7 @@ sub DESTROY
 {
 	my ($self) = @_;
 	return if $self->is_cancelled;
-	return if $self->_already_requested;
+	return if $self->is_requested;
 	if ($self->_request_object->method =~ m(^(GET|HEAD|OPTIONS|TRACE|SEARCH)$)i)
 	{
 		return unless $self->has_response_assertions;
@@ -556,9 +586,6 @@ C<< q() >> or C<< qq() >>:
 
  use Web::Magic -quotelike => 'qW';
  qW(http://www.google.com/search?q=kittens);
-
-But it doesn't always behave as expected.
-(See L<https://rt.cpan.org/Ticket/Display.html?id=72822>.)
 
 =head2 Pre-Request Methods
 
@@ -686,13 +713,27 @@ The response, as an L<HTTP::Response> object.
 
 =item C<< content >>
 
-The response body, as a string.
+The response body, as a string. This is a shortcut for:
+
+  $magic->response->decoded_content
 
 Web::Magic overloads stringification calling this method. Thus:
 
   print W('http://www.example.com/');
 
 will print the body of 'http://www.example.com/'.
+
+=item C<< headers >>
+
+The response headers, as an HTTP::Headers object. This is a shortcut for:
+
+  $magic->response->headers
+
+=item C<< header($name) >>
+
+A response header, as a string. This is a shortcut for:
+
+  $magic->response->headers->header($name)
 
 =item C<< to_hashref >>
 
@@ -810,14 +851,18 @@ getElementsByTagName on an HTTP error page. This may not be what you
 want. C<assert_response> allows you to check things are as expected
 before continuing, croaking otherwise.
 
-C<< $coderef >> should be a subroutine that accepts an HTTP::Response,
-and returns true if everything is OK, and false if something bad has
-happened. C<< $name >> is just a label for the assertion, to provide a
-more helpful error message if the assertion fails.
+C<< $coderef >> should be a subroutine that returns true if everything
+is OK, and false if something bad has happened. C<< $name >> is just a
+label for the assertion, to provide a more helpful error message if the 
+assertion fails.
 
   print W('http://example.com/data.json')
-    ->assert_response(correct_type => sub { (shift)->content_type =~ /json/i })
+    ->assert_response(correct_type => sub { $_->content_type =~ /json/i })
     ->{people}[0]{name};
+
+Your subroutine is called with the Web::Magic object as $_[0] (this
+was changed between Web::Magic 0.003 and 0.004). Additionally, C<$_> is
+set to the HTTP::Response object.
 
 An assertion can be made at any time. If made before the request, then
 it is queued up for checking later. If the assertion is made after the
@@ -829,7 +874,7 @@ This method returns the invocant, so may be chained.
 
 A shortcut for:
 
-  assert_response(success => sub { (shift)->is_success })
+  assert_response(success => sub { $_->is_success })
 
 This checks the HTTP response has a 2XX HTTP status code.
 
@@ -863,6 +908,8 @@ to evaluate to false:
 
 =begin private
 
+=item C<< AUTHORITY >>
+
 =item C<< CAN >>
 
 =item C<< can >>
@@ -890,7 +937,7 @@ Toby Inkster E<lt>tobyink@cpan.orgE<gt>.
 
 =head1 COPYRIGHT AND LICENCE
 
-This software is copyright (c) 2011 by Toby Inkster.
+This software is copyright (c) 2011-2012 by Toby Inkster.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

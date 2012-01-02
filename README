@@ -49,9 +49,6 @@ DESCRIPTION
      use Web::Magic -quotelike => 'qW';
      qW(http://www.google.com/search?q=kittens);
 
-    But it doesn't always behave as expected. (See
-    <https://rt.cpan.org/Ticket/Display.html?id=72822>.)
-
   Pre-Request Methods
     Constructing a Web::Magic object doesn't actually perform a request for
     the URI. Web::Magic defers requesting the URI until the last possible
@@ -164,13 +161,26 @@ DESCRIPTION
         The response, as an HTTP::Response object.
 
     "content"
-        The response body, as a string.
+        The response body, as a string. This is a shortcut for:
+
+          $magic->response->decoded_content
 
         Web::Magic overloads stringification calling this method. Thus:
 
           print W('http://www.example.com/');
 
         will print the body of 'http://www.example.com/'.
+
+    "headers"
+        The response headers, as an HTTP::Headers object. This is a shortcut
+        for:
+
+          $magic->response->headers
+
+    "header($name)"
+        A response header, as a string. This is a shortcut for:
+
+          $magic->response->headers->header($name)
 
     "to_hashref"
         Parses the response body as JSON or YAML (depending on Content-Type
@@ -277,14 +287,18 @@ DESCRIPTION
         you want. "assert_response" allows you to check things are as
         expected before continuing, croaking otherwise.
 
-        $coderef should be a subroutine that accepts an HTTP::Response, and
-        returns true if everything is OK, and false if something bad has
-        happened. $name is just a label for the assertion, to provide a more
-        helpful error message if the assertion fails.
+        $coderef should be a subroutine that returns true if everything is
+        OK, and false if something bad has happened. $name is just a label
+        for the assertion, to provide a more helpful error message if the
+        assertion fails.
 
           print W('http://example.com/data.json')
-            ->assert_response(correct_type => sub { (shift)->content_type =~ /json/i })
+            ->assert_response(correct_type => sub { $_->content_type =~ /json/i })
             ->{people}[0]{name};
+
+        Your subroutine is called with the Web::Magic object as $_[0] (this
+        was changed between Web::Magic 0.003 and 0.004). Additionally, $_ is
+        set to the HTTP::Response object.
 
         An assertion can be made at any time. If made before the request,
         then it is queued up for checking later. If the assertion is made
@@ -295,7 +309,7 @@ DESCRIPTION
     "assert_success"
         A shortcut for:
 
-          assert_response(success => sub { (shift)->is_success })
+          assert_response(success => sub { $_->is_success })
 
         This checks the HTTP response has a 2XX HTTP status code.
 
@@ -339,7 +353,7 @@ AUTHOR
     Toby Inkster <tobyink@cpan.org>.
 
 COPYRIGHT AND LICENCE
-    This software is copyright (c) 2011 by Toby Inkster.
+    This software is copyright (c) 2011-2012 by Toby Inkster.
 
     This is free software; you can redistribute it and/or modify it under
     the same terms as the Perl 5 programming language system itself.

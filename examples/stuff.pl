@@ -6,7 +6,7 @@ say Web::Magic->can('random_jackbauer_fact');
 
 my $u = W q{ http://json-schema.org/card };
 say $u->uri->authority;
-say $u->{description};
+#say $u->{description}; ## annoying - the JSON response is syntactically broken
 
 say W(q{ http://json-schema.org/ })
 	->getElementsByTagName('ul')

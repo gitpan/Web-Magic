@@ -39,3 +39,18 @@ dist:v_0-003
 		dcs:item   [ rdfs:label "Use newer Module::Package::RDF."@en ; a dcs:Packaging ]
 		] .
 
+dist:project :release dist:v_0-004 .
+dist:v_0-004
+	a               :Version ;
+	dc:issued       "2012-01-02"^^xsd:date ;
+	:revision       "0.004"^^xsd:string ;
+	:file-release   <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Web-Magic-0.004.tar.gz> ;
+	dcs:changeset [
+		dcs:versus dist:v_0-003 ;
+		dcs:item   [ rdfs:label "'headers' and 'header' methods."@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "Change calling convention for assert_response callbacks."@en ] ;
+		dcs:item   [ rdfs:label "Use Object::AUTHORITY instead of UNIVERSAL::AUTHORITY."@en ] ;
+		dcs:item   [ rdfs:label "use PerlX::QuoteOperator 0.04"@en ; a dcs:Update ] ;
+		dcs:item   [ rdfs:label "Preparation for an asynchronous implementation of Web::Magic. The current implementation is synchronous and likely to remain so - any async version will be a subclass."@en ]
+		] .
+

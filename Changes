@@ -5,6 +5,16 @@ Created:      2011-11-28
 Home page:    <https://metacpan.org/release/Web-Magic>
 Bug tracker:  <http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic>
 
+0.004  2012-01-02
+
+ - Change calling convention for assert_response callbacks.
+ - Preparation for an asynchronous implementation of Web::Magic. The
+   current implementation is synchronous and likely to remain so - any
+   async version will be a subclass.
+ - Use Object::AUTHORITY instead of UNIVERSAL::AUTHORITY.
+ - (Addition) 'headers' and 'header' methods.
+ - (Update) use PerlX::QuoteOperator 0.04
+
 0.003  2011-12-03
 
  - (Packaging) Use newer Module::Package::RDF.
@@ -12,8 +22,8 @@ Bug tracker:  <http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic>
 0.002  2011-11-30
 
  - Overload stringification to return HTTP response body.
- - (Documentation) Explain how to get back the URI as a string.
  - (Documentation) Document the quote-like operator feature.
+ - (Documentation) Explain how to get back the URI as a string.
 
 0.001  2011-11-30
 # Initial release
