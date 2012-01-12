@@ -1,10 +1,11 @@
 use 5.010;
 use lib "lib";
-use Web::Magic -sub => 'W';
+use Web::Magic::Async -sub => 'W';
 
 say Web::Magic->can('random_jackbauer_fact');
 
 my $u = W q{ http://json-schema.org/card };
+say ref $u;
 say $u->uri->authority;
 #say $u->{description}; ## annoying - the JSON response is syntactically broken
 

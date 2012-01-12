@@ -54,3 +54,19 @@ dist:v_0-004
 		dcs:item   [ rdfs:label "Preparation for an asynchronous implementation of Web::Magic. The current implementation is synchronous and likely to remain so - any async version will be a subclass."@en ]
 		] .
 
+dist:project :release dist:v_0-005 .
+dist:v_0-005
+	a               :Version ;
+	dc:issued       "2012-01-12"^^xsd:date ;
+	:revision       "0.005"^^xsd:string ;
+	:file-release   <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Web-Magic-0.005.tar.gz> ;
+	dcs:changeset [
+		dcs:versus dist:v_0-004 ;
+		dcs:item   [ rdfs:label "'querySelector' and 'querySelectorAll' methods."@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "Web::Magic::Async"@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "Throw blessed objects as exceptions."@en ] ;
+		dcs:item   [ rdfs:label "Improved documentation - especially of exceptions."@en ; a dcs:Documentation ] ;
+		dcs:item   [ rdfs:label "Include a fairly extensive test suite."@en ; a dcs:Packaging ] ;
+		dcs:item   [ rdfs:label "Escape URIs properly."@en ; a dcs:Bugfix ]
+		] .
+

@@ -4,6 +4,7 @@ author:
   - 'Toby Inkster <tobyink@cpan.org>'
 build_requires:
   ExtUtils::MakeMaker: 6.42
+  Test::Exception: 0
   Test::More: 0.61
 configure_requires:
   ExtUtils::MakeMaker: 6.42
@@ -24,15 +25,18 @@ no_index:
     - xt
 requires:
   Acme::24: 0.03
-  Carp: 0
+  AnyEvent::HTTP: 2.13
+  Exception::Class: 1.32
   HTML::HTML5::Parser: 0.100
   HTML::HTML5::Writer: 0.100
+  HTTP::Request: 0
+  HTTP::Response: 0
   JSON::JOM: 0.005
   JSON::JOM::Plugins::Dumper: 0
   JSON::JOM::Plugins::JsonPath: 0
   LWP::UserAgent: 0
   Object::AUTHORITY: 0
-  Object::Stash: 0.002
+  Object::Stash: 0.001
   PerlX::QuoteOperator: 0.04
   RDF::RDFa::Parser: 1.096
   RDF::Trine: 0.135
@@ -40,13 +44,16 @@ requires:
   Sub::Name: 0
   URI: 0
   URI::Escape: 0
+  XML::Feed: 0
   XML::LibXML: 1.70
+  XML::LibXML::QuerySelector: 0
   YAML::Any: 0
   common::sense: 0
   namespace::sweep: 0
   perl: 5.10.0
+  utf8: 0
 resources:
   bugtracker: http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic
   homepage: https://metacpan.org/release/Web-Magic
   license: http://dev.perl.org/licenses/
-version: 0.004
+version: 0.005

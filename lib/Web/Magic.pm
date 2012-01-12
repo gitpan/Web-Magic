@@ -3,31 +3,24 @@ package Web::Magic;
 use 5.010;
 use common::sense;
 use namespace::sweep; # namespace::autoclean breaks overloading
+use Object::AUTHORITY;
+use Object::Stash qw/_stash/;
 use utf8;
 
 BEGIN {
 	$Web::Magic::AUTHORITY = 'cpan:TOBYINK';
-	$Web::Magic::VERSION   = '0.004';
+	$Web::Magic::VERSION   = '0.005';
 }
 
-use Acme::24 0.03                  qw//; 
-use Carp 0                         qw/croak carp confess/;
-use HTML::HTML5::Parser 0.100      qw//;
-use HTML::HTML5::Writer 0.100      qw//;
-use JSON::JOM 0.005                qw/from_json to_jom to_json/;
+use JSON::JOM 0.005                qw/to_jom from_json to_json/;
 use JSON::JOM::Plugins::Dumper 0   qw//;
 use JSON::JOM::Plugins::JsonPath 0 qw//;
 use LWP::UserAgent 0               qw//;
-use Object::Stash 0.002            qw/_stash/;
 use PerlX::QuoteOperator 0.04      qw//;
-use RDF::RDFa::Parser 1.096        qw//;
-use RDF::Trine 0.135               qw//;
 use Scalar::Util 0                 qw/blessed/;
 use Sub::Name 0                    qw/subname/;
-use Object::AUTHORITY 0            qw//;
 use URI 0                          qw//;
-use URI::Escape 0                  qw//;
-use XML::LibXML 1.70               qw//;
+use URI::Escape 0                  qw/uri_escape/;
 use YAML::Any 0                    qw/Load Dump/;
 
 use overload
@@ -36,13 +29,92 @@ use overload
 	'""'   => \&content,
 	;
 
+our %Exceptions;
+
+BEGIN
+{
+	%Exceptions = (
+		'Web::Magic::Exception' => {
+			description => 'a general Web::Magic error has occurred',
+			},
+		'Web::Magic::Exception::BadPhase' => {
+			isa         => 'Web::Magic::Exception',
+			description => 'a method has been called on a Web::Magic object '
+							 .' which is in the wrong state to perform that method',
+			},
+		'Web::Magic::Exception::BadPhase::SetRequestMethod' => {
+			isa         => 'Web::Magic::Exception::BadPhase',
+			description => 'attempt to set request method for a request that '
+							 . 'has already been performed',
+			fields      => [qw/attempted_method used_method/],
+			},
+		'Web::Magic::Exception::BadPhase::SetRequestHeader' => {
+			isa         => 'Web::Magic::Exception::BadPhase',
+			description => 'attempt to set a request header for a request that '
+							 . 'has already been performed',
+			fields      => [qw/attempted_value used_value header/],
+			},
+		'Web::Magic::Exception::BadPhase::SetRequestBody' => {
+			isa         => 'Web::Magic::Exception::BadPhase',
+			description => 'attempt to set request body for a request that '
+							 . 'has already been performed',
+			fields      => [qw/attempted_body used_body/],
+			},
+		'Web::Magic::Exception::BadPhase::Cancel' => {
+			isa         => 'Web::Magic::Exception::BadPhase',
+			description => 'attempt to cancel a request that has already been '
+							 . 'performed',
+			},
+		'Web::Magic::Exception::BadPhase::WillNotRequest' => {
+			isa         => 'Web::Magic::Exception::BadPhase',
+			description => 'attempt to perform a request that was explicitly '
+							 . 'cancelled',
+			fields      => [qw/cancellation/],
+			},
+		'Web::Magic::Exception::AssertionFailure' => {
+			isa         => 'Web::Magic::Exception',
+			description => 'an assertion failed',
+			fields      => [qw/assertion_name assertion_coderef
+									 http_request http_response/],
+			},
+		'Web::Magic::Exception::BadContent' => {
+			isa         => 'Web::Magic::Exception',
+			description => 'cannot coerce from a Perl object to HTTP message body',
+			fields      => [qw/body/],
+			},
+		'Web::Magic::Exception::BadReponseType' => {
+			isa         => 'Web::Magic::Exception',
+			description => 'cannot coerce from an HTTP message body to a Perl object, '
+			             . 'because is is of the wrong type',
+			fields      => [qw/content_type/],
+			},
+		);
+	
+	require Exception::Class;
+	Exception::Class->import(%Exceptions);
+	
+	sub __exception_documentation
+	{
+		foreach my $e (sort keys %Exceptions)
+		{
+			my $E = $Exceptions{ $e };
+			printf "=head3 %s\n\n", $e;
+			printf "B<Cause:> %s.\n\n", $E->{description};
+			printf "B<Additional fields:> %s.\n\n",
+				(join q{, }, @{$E->{fields}})
+				if $E->{fields};
+		}
+	}
+}
+
 my %F;
 BEGIN {
 	$F{$_} = 'to_dom'
 		foreach qw/getElementsByTagName getElementsByTagNameNS
 			getElementsByLocalName getElementsById documentElement
 			cloneNode firstChild lastChild findnodes find findvalue
-			exists childNodes attributes getNamespaces/;
+			exists childNodes attributes getNamespaces
+			querySelector querySelectorAll/;
 	$F{$_} = 'to_hashref'
 		foreach qw/findNodes/;
 	$F{$_} = 'to_model'
@@ -60,11 +132,6 @@ BEGIN {
 		foreach qw/random_jackbauer_fact/;
 }
 
-sub AUTHORITY
-{
-	goto &Object::AUTHORITY::AUTHORITY;
-}
-
 sub import
 {
 	my ($class, %args) = @_;
@@ -73,7 +140,7 @@ sub import
 	
 	if ($args{-quotelike})
 	{
-		my $code   = sub ($) { __PACKAGE__->new(@_); };
+		my $code   = sub ($) { $class->new(@_); };
 		
 		$args{-quotelike} = [ $args{-quotelike} ]
 			unless ref $args{-quotelike};
@@ -89,7 +156,7 @@ sub import
 	
 	if ($args{-sub})
 	{
-		my $code   = sub ($;$%) { __PACKAGE__->new(@_); };
+		my $code   = sub ($;$%) { $class->new(@_); };
 		
 		$args{-sub} = [ $args{-sub} ]
 			unless ref $args{-sub};
@@ -98,6 +165,11 @@ sub import
 		*{"$caller\::$_"} = subname "$caller\::$_", $code
 			foreach @{ $args{-sub} };
 	}
+}
+
+sub AUTHORITY
+{
+	goto &Object::AUTHORITY::AUTHORITY;
 }
 
 sub new
@@ -115,7 +187,9 @@ sub new
 	
 	if (%args)
 	{
-		$u .= '?' . join '&', map { sprintf('%s=%s', $_, $args{$_}) } keys %args;
+		$u .= '?' . join '&',
+			map { sprintf('%s=%s', uri_escape($_), uri_escape($args{$_})) }
+			keys %args;
 	}
 	
 	my $self = bless \$u, $class;
@@ -137,7 +211,7 @@ sub CAN
 	}
 	elsif ($func =~ /^[A-Z]/ and $func =~ /[a-z]/)
 	{
-		return sub { (shift)->set_request_header($func, @_); };
+		return sub { warn "FUNC: $func"; (shift)->set_request_header($func, @_); };
 	}
 	return;
 }
@@ -155,24 +229,55 @@ sub AUTOLOAD
 	my ($method)   = ($AUTOLOAD =~ /::([^:]+)$/);
 	my $ref = __PACKAGE__->CAN($method, @_);
 	
-	croak(sprintf q{Can't locate object method "%s" via package "%s"}, $method, __PACKAGE__)
+	Web::Magic::Exception->throw(
+		sprintf(q{Can't locate object method "%s" via package "%s"}, $method, __PACKAGE__)
+		)
 		unless ref $ref;
 	
 	if (1) # if we ever start to vary autoloaded methods on a per-object basis,
 	{      # need to turn this off.
 		no strict 'refs';
-		*{$method} = $ref;
+		*{$method} = subname $method => $ref;
 	}
 	
 	goto &$ref;
 }
 
+sub __deferred_load
+{
+	my $self = shift;
+	while (@_)
+	{
+		my $package = shift;
+		my $version = shift;
+		my $list    = (ref $_[0]) ? shift : [];
+
+		# Normally I'd say "use Class::Load", but here we can trust the
+		# strings $package and $version, because they are set locally.
+		# Thus a string eval should be safe (and a little faster).
+
+		next if UNIVERSAL::can($package, 'can');
+		eval "use $package $version qw//;1" or die $@;
+		$package->import(@$list);
+	}
+	$self;
+}
+
 sub set_request_method
 {
 	my ($self, @args) = @_;
-	croak "Cannot set request method on already requested resource"
-		if @args && $self->is_requested;
-	$self->_request_object->method(uc $args[0]);
+	
+	if ($self->is_requested)
+	{
+		Web::Magic::Exception::BadPhase::SetRequestMethod->throw(
+			message =>
+				"Cannot set request method on already requested resource\n",
+			attempted_method => (uc $args[0] // 'GET'),
+			used_method      => $self->_request_object->method,
+			);
+	}
+	
+	$self->_request_object->method(uc $args[0] // 'GET');
 	$self->set_request_body($args[1]) if exists $args[1];
 	return $self;
 }
@@ -180,19 +285,37 @@ sub set_request_method
 sub set_request_body
 {
 	my ($self, $body) = @_;
+	
 	if ($self->is_requested)
 	{
-		croak "Cannot set request body on already requested resource";
+		Web::Magic::Exception::BadPhase::SetRequestBody->throw(
+			message =>
+				"Cannot set request body on already requested resource\n",
+			attempted_body   => $body,
+			used_body        => $self->_request_object->body,
+			);
 	}
+
 	$self->_stash->{request_body} = $body;
+	return $self;
 }
 
 sub set_request_header
 {
-	my ($self, @args) = @_;
-	croak "Cannot set request header on already requested resource"
-		if exists $args[1] && $self->is_requested;
-	$self->_request_object->header(@args);
+	my ($self, $h, $v) = @_;
+
+	if ($self->is_requested)
+	{
+		Web::Magic::Exception::BadPhase::SetRequestHeader->throw(
+			message =>
+				"Cannot set request header '$h' on already requested resource\n",
+			header           => $h,
+			attempted_value  => $v,
+			used_value       => $self->_request_object->header($h),
+			);
+	}
+
+	$self->_request_object->header($h => $v);
 	return $self;
 }
 
@@ -229,7 +352,7 @@ sub _final_request_object
 	my ($self, %extra_headers) = @_;
 	
 	my $req = $self->_request_object;
-#	return $req if $self->is_requested;
+	return $req if $self->is_requested;
 
 	if (%extra_headers)
 	{
@@ -249,6 +372,8 @@ sub _final_request_object
 		}
 		elsif (blessed $body and $body->isa('RDF::Trine::Model'))
 		{
+			$self->__deferred_load('RDF::Trine' => '0.135');
+				
 			my $ser;
 			given ( $req->content_type//'xml' )
 			{
@@ -267,6 +392,8 @@ sub _final_request_object
 		}
 		elsif (blessed $body and $body->isa('XML::LibXML::Document'))
 		{
+			$self->__deferred_load('XML::LibXML' => '1.70');
+			
 			my $ser;
 			given ( $req->content_type//'xml' )
 			{
@@ -293,9 +420,19 @@ sub _final_request_object
 		}
 		elsif (ref $body eq 'HASH' and ($req->content_type//'www-form-urlencoded') =~ /www-form-urlencoded/i)
 		{
-			my $axwwfue = join '&', map { sprintf('%s=%s', $_, $body->{$_}) } keys %$body;
+			my $axwwfue = join '&',
+				map { sprintf('%s=%s', uri_escape($_), uri_escape($body->{$_})) }
+				keys %$body;
 			$req->content($axwwfue);
 			$success++;
+		}
+		else
+		{
+			my $ref = ref $body;
+			Web::Magic::Exception::BadContent->throw(
+				message  => "Cannot coerce type '$ref' to HTTP request body\n",
+				body     => $body,
+				);
 		}
 	}
 	
@@ -315,8 +452,16 @@ sub _check_assertions
 	foreach my $assertion (@assertions)
 	{
 		my ($name, $code) = @$assertion;
-		$_ = $response;
-		croak "Response assertion '$name' failed for '$$self'" unless $code->($self);
+		local $_ = $response;
+		next if $code->($self);
+		
+		Web::Magic::Exception::AssertionFailure->throw(
+			message           => "Assertion '$name' failed for <$$self>\n",
+			assertion_name    => $name,
+			assertion_coderef => $code,
+			http_request      => $self->_request_object,
+			http_response     => $response,
+			);
 	}
 
 	return $self;
@@ -328,7 +473,10 @@ sub do_request
 	
 	if ($self->is_cancelled)
 	{
-		croak "Need to perform HTTP request, but it is cancelled.";
+		Web::Magic::Exception::BadPhase::WillNotRequest->throw(
+			message      => "Need to perform HTTP request, but it is cancelled\n",
+			cancellation => $self->is_cancelled,
+			);
 	}
 	
 	unless ($self->is_requested)
@@ -377,11 +525,16 @@ sub response
 	$self->_stash->{response};
 }
 
+sub _cancel_progress
+{
+	# no-op
+}
+
 sub to_hashref
 {
 	my ($self) = @_;
 	my $stash = $self->_stash;
-	
+
 	unless (exists $stash->{hashref})
 	{
 		$self->do_request(Accept => 'application/json, application/yaml, text/yaml');
@@ -396,7 +549,12 @@ sub to_hashref
 		}
 		else
 		{
-			croak "Can't treat this media type as a hashref: ".$self->headers->content_type;
+			$self->_cancel_progress;
+			Web::Magic::Exception::BadReponseType->throw(
+				message      => "Can't treat this media type as a hashref: "
+				              . $self->headers->content_type . "\n",
+				content_type => $self->headers->content_type,
+				);
 		}
 	}
 	
@@ -407,7 +565,14 @@ sub to_dom
 {
 	my ($self) = @_;
 	my $stash = $self->_stash;
-	
+
+	$self->__deferred_load(
+		'HTML::HTML5::Parser'        => '0.100',
+		'HTML::HTML5::Writer'        => '0.100',
+		'XML::LibXML'                => '1.70',
+		'XML::LibXML::QuerySelector' => 0,
+		);
+
 	unless (exists $stash->{dom})
 	{
 		$self->do_request(Accept => 'application/xml, text/xml, application/atom+xml, application/xhtml+xml, text/html');
@@ -424,7 +589,12 @@ sub to_dom
 		}
 		else
 		{
-			croak "Can't treat this media type as a DOM: ".$self->response->content_type;
+			$self->_cancel_progress;
+			Web::Magic::Exception::BadReponseType->throw(
+				message      => "Can't treat this media type as a DOM: "
+				              . $self->headers->content_type . "\n",
+				content_type => $self->headers->content_type,
+				);
 		}
 	}
 	
@@ -435,7 +605,12 @@ sub to_model
 {
 	my ($self) = @_;
 	my $stash = $self->_stash;
-	
+
+	$self->__deferred_load(
+		'RDF::RDFa::Parser'    => '1.096',
+		'RDF::Trine'           => '0.135',
+		);
+
 	unless (exists $stash->{model})
 	{
 		$self->do_request(Accept => 'application/rdf+xml, text/turtle, application/xhtml+xml;q=0.1');
@@ -469,6 +644,8 @@ sub to_feed
 	my ($self) = @_;
 	my $stash = $self->_stash;
 	
+	$self->__deferred_load('XML::Feed' => 0);
+	
 	unless (exists $stash->{feed})
 	{
 		my $response = $self->response(Accept => 'application/atom+xml, application/rss+xml, application/rdf+xml;q=0.1');
@@ -494,13 +671,20 @@ sub uri
 sub cancel
 {
 	my ($self) = @_;
-	croak "Tried to cancel an already submitted request" if $self->is_requested;
-	$self->_stash->{cancel_request}++;
+	
+	Web::Magic::Exception::BadPhase::Cancel->throw(
+		"Tried to cancel an already submitted request\n"
+		)
+		if $self->is_requested;
+	
+	$self->_stash->{cancel_request} = [ caller(0) ];
 	return $self;
 }
 
 sub acme_24
 {
+	my ($self) = @_;
+	$self->__deferred_load('Acme::24'   => '0.03');
 	return 'Acme::24';
 }
 
@@ -553,7 +737,7 @@ be interacted with in all sorts of useful ways.
 =item C<< new ([$method,] $uri [, %args]) >>
 
 C<< $method >> is the HTTP method to use with the URI, such as 'GET',
-'POST', 'PUT' or 'DELETE'. The HTTP method must be capitalised to
+'POST', 'PUT' or 'DELETE'. The HTTP method B<must> be capitalised to
 avoid it being interpreted by the constructor as a URI. It defaults to
 'GET'.
 
@@ -568,6 +752,10 @@ stringification. The following are all equivalent...
  Web::Magic->new('http://www.google.com/search', q => 'kittens');
  Web::Magic->new(GET => 'http://www.google.com/search?q=kittens');
  Web::Magic->new('http://www.google.com/search?q=kittens');
+
+Note that C<< %args >> always sets a URI query string, and does B<not>
+set the request body, B<even in the case of the POST method>. To set
+the request body, see the C<set_request_body> method.
 
 =back
 
@@ -622,8 +810,8 @@ the following are equivalent:
 Using the latter technique, methods need to conform to this regular
 expression: C<< /^[A-Z][A-Z0-9]{0,19}$/ >>.
 
-This will throw an error if called on a Web::Magic object that has already
-been requested.
+This will throw a Web::Magic::Exception::BadPhase::SetRequestMethod exception
+if called on a Web::Magic object that has already been requested.
 
 =item C<< set_request_header($header, $value) >>
 
@@ -638,8 +826,8 @@ hyphens for underscores. That is, the following are equivalent:
 Using the latter technique, methods need to begin with a capital letter
 and contain at least one lower-case letter. 
 
-This will throw an error if called on a Web::Magic object that has already
-been requested.
+This will throw a Web::Magic::Exception::BadPhase::SetRequestHeader exception
+if called on a Web::Magic object that has already been requested.
 
 =item C<< set_request_body($body) >>
 
@@ -659,14 +847,17 @@ Yes, that's right. Even though the content-type is set *after* the
 body, it is still serialised appropriately. This is because
 serialisation is deferred until just before the request is made.
 
-This will throw an error if called on a Web::Magic object that has already
-been requested.
+This will throw a Web::Magic::Exception::BadPhase::SetRequestBody exception
+if called on a Web::Magic object that has already been requested.
+
+A Web::Magic::Exception::BadPhase::Cancel exception will be thrown if the
+body can't be serialised, but not until the request is actually performed.
 
 =item C<< cancel >>
 
 This method may be called to show you do not intend for this object
 to be requested. Attempting to request an object that has been cancelled
-will throw an exception.
+will throw a Web::Magic::Exception::BadPhase::Cancel exception.
 
   my $magic = W('http://www.google.com/');
   $magic->cancel;
@@ -676,13 +867,10 @@ Why is this needed? Because even if you don't explicitly call
 C<< do_request >>, the request will be made implicitly in some cases.
 C<< cancel >> allows you to avoid the implicit request.
 
-This will throw an error if called on a Web::Magic object that has already
-been requested.
-
 =item C<< do_request >>
 
 Actually performs the HTTP request. You rarely need to call this
-method implicitly, as calling any Post-Request method will automatically
+method explicitly, as calling any Post-Request method will automatically
 call C<do_request>.
 
 C<do_request> will be called automatically (via C<DESTROY>) on any
@@ -691,8 +879,8 @@ the request has been cancelled, or the request is unlikely to have had
 side-effects (i.e. its method is 'GET', 'HEAD', 'OPTIONS', 'TRACE'
 or 'SEARCH').
 
-This will throw an error if called on a Web::Magic object that has
-been cancelled.
+This will throw a Web::Magic::Exception::BadPhase::WillNotRequest exception
+if called on a Web::Magic object that has been cancelled.
 
 =back
 
@@ -753,39 +941,112 @@ When C<to_hashref> is called on an unrequested Web::Magic object,
 it implicitly sets the HTTP Accept header to include JSON and YAML
 unless the Accept header has already been set.
 
+This will throw a Web::Magic::Exception::BadReponseType exception
+if the HTTP response has a Content-Type that cannot be converted to
+a hashref.
+
 =item C<< to_dom >>
 
 Parses the response body as XML or HTML (depending on Content-Type
-header) and returns the result as an L<XML::LibXML::Document>.
+header) and returns the result as an XML::LibXML::Document.
 
 When C<to_dom> is called on an unrequested Web::Magic object,
 it implicitly sets the HTTP Accept header to include XML and HTML
 unless the Accept header has already been set.
 
 Additionally, the following methods can be called which implicitly
-call C<to_dom>: getElementsByTagName getElementsByTagNameNS
-getElementsByLocalName getElementsById documentElement
-cloneNode firstChild lastChild findnodes find findvalue
-exists childNodes attributes getNamespaces. So, for example, the
-following are equivalent:
+call C<to_dom> (see L<XML::LibXML::Document>):
 
-  W('http://example.com/')->to_dom->getElementsByTagName('title');
-  W('http://example.com/')->getElementsByTagName('title');
+=over
+
+=item * C<getElementsByTagName>
+
+=item * C<getElementsByTagNameNS>
+
+=item * C<getElementsByLocalName>
+
+=item * C<getElementsById>
+
+=item * C<documentElement>
+
+=item * C<cloneNode>
+
+=item * C<firstChild>
+
+=item * C<lastChild>
+
+=item * C<findnodes>
+
+=item * C<find>
+
+=item * C<findvalue>
+
+=item * C<exists>
+
+=item * C<childNodes>
+
+=item * C<attributes>
+
+=item * C<getNamespaces>
+
+=item * C<querySelector>
+
+=item * C<querySelectorAll>
+
+=back
+
+So, for example, the following are equivalent:
+
+  my @titles = W('http://example.com/')
+    ->to_dom->getElementsByTagName('title');
+  
+  my @titles = W('http://example.com/')
+    ->getElementsByTagName('title');
+
+I'll just draw your attention to C<querySelector> and C<querySelectorAll>
+which were mentioned in the previous list, but are hidden gems. See
+L<XML::LibXML::QuerySelector> for further details.
+
+This will throw a Web::Magic::Exception::BadReponseType exception
+if the HTTP response has a Content-Type that cannot be converted to
+a DOM.
 
 =item C<< to_model >>
 
 Parses the response body as RDF/XML, Turtle, RDF/JSON or RDFa
 (depending on Content-Type header) and returns the result as an
-L<RDF::Trine::Model>.
+RDF::Trine::Model.
 
 When C<to_model> is called on an unrequested Web::Magic object,
 it implicitly sets the HTTP Accept header to include RDF/XML and Turtle
 unless the Accept header has already been set.
 
 Additionally, the following methods can be called which implicitly
-call C<to_model>: subjects predicates objects objects_for_predicate_list
-get_pattern get_statements count_statements get_sparql as_stream. So,
-for example, the following are equivalent:
+call C<to_model> (see L<RDF::Trine::Model>):
+
+=over
+
+=item * C<subjects>
+
+=item * C<predicates>
+
+=item * C<objects>
+
+=item * C<objects_for_predicate_list>
+
+=item * C<get_pattern>
+
+=item * C<get_statements>
+
+=item * C<count_statements>
+
+=item * C<get_sparql>
+
+=item * C<as_stream>
+
+=back
+
+So, for example, the following are equivalent:
 
   W('http://example.com/')->to_model->get_pattern($pattern);
   W('http://example.com/')->get_pattern($pattern);
@@ -793,17 +1054,25 @@ for example, the following are equivalent:
 =item C<< to_feed >>
 
 Parses the response body as Atom or RSS (depending on Content-Type
-header) and returns the result as an L<XML::Feed>.
+header) and returns the result as an XML::Feed.
 
 When C<to_feed> is called on an unrequested Web::Magic object,
 it implicitly sets the HTTP Accept header to include Atom and RSS
 unless the Accept header has already been set.
 
 Additionally, the following methods can be called which implicitly
-call C<to_feed>: entries. So, for example, the following are equivalent:
+call C<to_feed> (see L<XML::Feed>):
 
-  W('http://example.com/')->to_feed->entries;
-  W('http://example.com/')->entries;
+=over
+
+=item * C<entries>
+
+=back
+
+So, for example, the following are equivalent:
+
+  W('http://example.com/feed.atom')->to_feed->entries;
+  W('http://example.com/feed.atom')->entries;
 
 =back
 
@@ -817,11 +1086,28 @@ Web::Magic object, so are not usually suitable for chaning.
 
 =item C<< uri >>
 
-Returns the original URI, as a L<URI> object.
+Returns the original URI, as a URI object.
 
 Additionally, the following methods can be called which implicitly
-call C<uri>: scheme authority path query host port. So, for example,
-the following are equivalent:
+call C<uri> (see L<URI>):
+
+=over
+
+=item * C<scheme>
+
+=item * C<authority>
+
+=item * C<path>
+
+=item * C<query>
+
+=item * C<host>
+
+=item * C<port>
+
+=back
+
+So, for example, the following are equivalent:
 
   W('http://example.com/')->uri->host;
   W('http://example.com/')->host;
@@ -849,16 +1135,17 @@ Checks an assertion about the HTTP response. Web::Magic will blithely
 allow you to call to_hashref on a non-JSON/YAML response, or
 getElementsByTagName on an HTTP error page. This may not be what you
 want. C<assert_response> allows you to check things are as expected
-before continuing, croaking otherwise.
+before continuing, throwing a Web::Magic::Exception::AssertionFailure
+otherwise.
 
 C<< $coderef >> should be a subroutine that returns true if everything
 is OK, and false if something bad has happened. C<< $name >> is just a
 label for the assertion, to provide a more helpful error message if the 
 assertion fails.
 
-  print W('http://example.com/data.json')
-    ->assert_response(correct_type => sub { $_->content_type =~ /json/i })
-    ->{people}[0]{name};
+ print W('http://example.com/data.json')
+   ->assert_response(correct_type => sub { $_->content_type =~ /json/i })
+   ->{people}[0]{name};
 
 Your subroutine is called with the Web::Magic object as $_[0] (this
 was changed between Web::Magic 0.003 and 0.004). Additionally, C<$_> is
@@ -893,8 +1180,15 @@ to issue the request.
 Returns the string 'Acme::24'.
 
 Additionally, the following methods can be called which implicitly
-call C<acme_24>: random_jackbauer_fact. So, for example,
-the following are equivalent:
+call C<acme_24>:
+
+=over
+
+=item * C<random_jackbauer_fact>
+
+=back
+
+So, for example, the following are equivalent:
 
   W('http://example.com/')->acme_24->random_jackbauer_fact;
   W('http://example.com/')->random_jackbauer_fact;
@@ -906,6 +1200,48 @@ to evaluate to false:
 
   W('http://example.com/')->can('random_jackbauer_fact')
 
+=back
+
+=head2 Private Methods
+
+The following methods should not normally be used, but may be useful
+for people wishing to subclass Web::Magic:
+
+=over
+
+=item * C<< _stash >>
+
+A hashref for storing useful data.
+
+=item * C<< _ua_string >>
+
+User-Agent header string to use for HTTP requests.
+
+=item * C<< _request_object >>
+
+The (mutable) HTTP::Request object that can/will be used to issue the request.
+
+=item * C<< _final_request_object(%default_headers) >>
+
+Returns the HTTP::Request object that will be used to issue the request.
+Sets C<< %default_headers >> as HTTP request headers only if they are not
+already set. Serialises the request body from
+C<< $self->_stash->{request_body} >>.
+
+=item * C<< _check_assertions($reponse, @assertions) >>
+
+Each assertion is a [name, coderef] arrayref. Checks each assertion against
+the HTTP response, throwing exceptions as necessary.
+
+=item * C<< _cancel_progress >>
+
+A no-op in this implementation. This method is sometimes called just prior
+to an exception being thrown. Thus, in an asynchronous implementation which
+performs HTTP requests in a background thread, you can use this callback
+to tidy up HTTP connections prior to the exception being thrown.
+
+=back
+
 =begin private
 
 =item C<< AUTHORITY >>
@@ -916,7 +1252,66 @@ to evaluate to false:
 
 =end private
 
-=back
+=head2 Exceptions
+
+Web::Magic's exceptions are subclasses of L<Exception::Class::Base> - the
+documentation for that class lists several useful functions, such as:
+
+ Web::Magic::Exception->Trace(1); # enable full stack traces
+
+=head3 Web::Magic::Exception
+
+B<Cause:> a general Web::Magic error has occurred.
+
+=head3 Web::Magic::Exception::AssertionFailure
+
+B<Cause:> an assertion failed.
+
+B<Additional fields:> assertion_name, assertion_coderef, http_request, http_response.
+
+=head3 Web::Magic::Exception::BadContent
+
+B<Cause:> cannot coerce from a Perl object to HTTP message body.
+
+B<Additional fields:> body.
+
+=head3 Web::Magic::Exception::BadPhase
+
+B<Cause:> a method has been called on a Web::Magic object  which is in the wrong state to perform that method.
+
+=head3 Web::Magic::Exception::BadPhase::Cancel
+
+B<Cause:> attempt to cancel a request that has already been performed.
+
+=head3 Web::Magic::Exception::BadPhase::SetRequestBody
+
+B<Cause:> attempt to set request body for a request that has already been performed.
+
+B<Additional fields:> attempted_body, used_body.
+
+=head3 Web::Magic::Exception::BadPhase::SetRequestHeader
+
+B<Cause:> attempt to set a request header for a request that has already been performed.
+
+B<Additional fields:> attempted_value, used_value, header.
+
+=head3 Web::Magic::Exception::BadPhase::SetRequestMethod
+
+B<Cause:> attempt to set request method for a request that has already been performed.
+
+B<Additional fields:> attempted_method, used_method.
+
+=head3 Web::Magic::Exception::BadPhase::WillNotRequest
+
+B<Cause:> attempt to perform a request that was explicitly cancelled.
+
+B<Additional fields:> cancellation.
+
+=head3 Web::Magic::Exception::BadReponseType
+
+B<Cause:> cannot coerce from an HTTP message body to a Perl object, because is is of the wrong type.
+
+B<Additional fields:> content_type.
 
 =head1 BUGS
 
@@ -926,6 +1321,8 @@ Have a go at enumerating them here:
 L<http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic>.
 
 =head1 SEE ALSO
+
+L<Web::Magic::Async>.
 
 L<LWP::UserAgent>, L<URI>, L<HTTP::Request>, L<HTTP::Response>.
 
