@@ -1,6 +1,7 @@
 Changes
 examples/assert-async.pl
 examples/assert.pl
+examples/quote-like.pl
 examples/stuff.pl
 inc/Module/AutoInstall.pm
 inc/Module/Install.pm

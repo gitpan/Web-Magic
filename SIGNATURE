@@ -14,14 +14,15 @@ not run its Makefile.PL or Build.PL.
 -----BEGIN PGP SIGNED MESSAGE-----
 Hash: SHA1
 
-SHA1 6b0d3d7400b56dcf58e4bf9e3c04797c241c198c Changes
+SHA1 af3e91a4d3233251beb5348f124fcd0c1771538c Changes
 SHA1 1d54db0b8134eb1c8ea0cee400f9dc612bcaa61a LICENSE
-SHA1 f96346b7d7a5e12436e329c64b4e92a3d5809734 MANIFEST
-SHA1 664caea9e97ff74e377a269d67055ec98a5d26f5 META.yml
+SHA1 9c911241812251c0c941ead9283589110a039c2b MANIFEST
+SHA1 19f890e43f3250798284f2a200d98fd4985a888b META.yml
 SHA1 80519f46cf4d005b59c73d680d3f90aef176d9bd Makefile.PL
 SHA1 aea729cd2fe02a4ee09319627b0186614fc987d5 README
 SHA1 769575bddad1894cf0a452c926cb768a080b34f1 examples/assert-async.pl
 SHA1 8c6b55be295789bf8272ff2ac1910d45cb076b68 examples/assert.pl
+SHA1 e2620799238b92cb154de81d6e3547acc5e45eb1 examples/quote-like.pl
 SHA1 fffc86fb66a75b2e30f58b121fae21302cc00f7f examples/stuff.pl
 SHA1 5d94bc10deff1dd74e4bc5dfa6fc015e39271f15 inc/Module/AutoInstall.pm
 SHA1 40106479d4e07f379cb82ca1d69fca92e3a40f47 inc/Module/Install.pm
@@ -42,9 +43,9 @@ SHA1 6b807287940754cc31a3db59f2b22e363d5525be inc/Module/Package/Dist/RDF.pm
 SHA1 775bd24f2fdbb6dce51a8b5b0cdb01fccfce83c4 inc/Scalar/Util.pm
 SHA1 b1b664983568bf822c327599eb88e223483ae96a inc/Scalar/Util/PP.pm
 SHA1 eef6bff62046bff2ce08ba132d0b58fba30f40b4 inc/YAML/Tiny.pm
-SHA1 9c9d7d8dd287c73274670ea878de6a9e361d9818 lib/Web/Magic.pm
-SHA1 3497bdad71c456341bbc7a9a6aec13487a94df60 lib/Web/Magic/Async.pm
-SHA1 65d9b0220fdc4aa2c1f38c571d190434b9c32e61 meta/changes.ttl
+SHA1 e8d2ac8f8f13c35482f3d81e99a59cbddfd760e7 lib/Web/Magic.pm
+SHA1 4c8062e36c4bec4339de7238e71754354ea2a5f5 lib/Web/Magic/Async.pm
+SHA1 de5512fbc7f7960078efdf0afba1aaa7ed840ec6 meta/changes.ttl
 SHA1 61d5ba4e60fc0a075f79d4cce4513e1f8fef5d73 meta/doap.ttl
 SHA1 8cac7c8df5e600b9626deb96d4cad6fe83800585 meta/makefile.ttl
 SHA1 2906cae4fc3538ff6be648a2c51366aa7f73f478 t/01basic.t
@@ -57,7 +58,7 @@ SHA1 3af73799e07cda62d6526ad55e04a8981ec09168 t/lib/TestHttpServer.pm
 -----BEGIN PGP SIGNATURE-----
 Version: GnuPG v1.4.10 (GNU/Linux)
 
-iEYEARECAAYFAk8OwhoACgkQzr+BKGoqfTlp3wCfdFLfVBJ4MpV7KDFJfyneWOqT
-TW4AnRYD1Gccd9uQApaSdKD9ty4bofcN
-=UXrp
+iEYEARECAAYFAk8PTLIACgkQzr+BKGoqfTm5NwCfUba+cFL/hlq7iDDKp80KAr7I
+ZoAAn27HRhoPMtTIcs1KAD3kFwn1WoRE
+=nqMv
 -----END PGP SIGNATURE-----

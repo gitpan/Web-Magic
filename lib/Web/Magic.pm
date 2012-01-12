@@ -9,7 +9,7 @@ use utf8;
 
 BEGIN {
 	$Web::Magic::AUTHORITY = 'cpan:TOBYINK';
-	$Web::Magic::VERSION   = '0.005';
+	$Web::Magic::VERSION   = '0.006';
 }
 
 use JSON::JOM 0.005                qw/to_jom from_json to_json/;
@@ -203,16 +203,20 @@ sub CAN
 	
 	if (defined (my $via = $F{$func}))
 	{
-		return sub { (shift)->$via()->$func(@_); };
+		return
+			sub { (shift)->$via()->$func(@_) }
 	}
 	elsif ($func =~ /^[A-Z][A-Z0-9]{0,19}$/)
 	{
-		return sub { (shift)->set_request_method($func, @_); };
+		return
+			sub { (shift)->set_request_method($func, @_) }
 	}
 	elsif ($func =~ /^[A-Z]/ and $func =~ /[a-z]/)
 	{
-		return sub { warn "FUNC: $func"; (shift)->set_request_header($func, @_); };
+		return
+			sub { (shift)->set_request_header($func, @_) }
 	}
+	
 	return;
 }
 
@@ -362,6 +366,9 @@ sub _final_request_object
 		}
 	}
 	
+	my $req_ct = $req->content_type;
+	$req_ct = undef unless $req_ct;
+	
 	if (defined (my $body = $self->_stash->{request_body}))
 	{
 		my $success;
@@ -375,18 +382,19 @@ sub _final_request_object
 			$self->__deferred_load('RDF::Trine' => '0.135');
 				
 			my $ser;
-			given ( $req->content_type//'xml' )
+			
+			given ( $req_ct // 'xml' )
 			{
 				when (/xml/)     { $ser = RDF::Trine::Serializer::RDFXML->new }
 				when (/turtle/)  { $ser = RDF::Trine::Serializer::Turtle->new }
 				when (/plain/)   { $ser = RDF::Trine::Serializer::NTriples->new }
 				when (/json/)    { $ser = RDF::Trine::Serializer::RDFJSON->new }
 			}
+			
 			if ($ser)
 			{
 				$req->content($ser->serialize_model_to_string($body));
-				$req->content_type('application/rdf+xml')
-					unless $req->content_type;
+				$req->content_type('application/rdf+xml') unless $req_ct;
 				$success++;
 			}
 		}
@@ -395,35 +403,37 @@ sub _final_request_object
 			$self->__deferred_load('XML::LibXML' => '1.70');
 			
 			my $ser;
-			given ( $req->content_type//'xml' )
+			
+			given ( $req_ct // 'xml' )
 			{
 				when (/xml/)     { $ser = $body->toString }
 				when (/html/)    { $ser = HTML::HTML5::Writer->new->document($body) }
 			}
+			
 			if ($ser)
 			{
 				$req->content($ser);
-				$req->content_type('application/xml')
-					unless $req->content_type;
+				$req->content_type('application/xml') unless $req_ct;
 				$success++;
 			}
 		}
-		elsif (ref $body and ($req->content_type//'') =~ /json/i)
+		elsif (ref $body and ($req_ct//'') =~ /json/i)
 		{
 			$req->content(to_json($body));
 			$success++;
 		}
-		elsif (ref $body and ($req->content_type//'') =~ /yaml/i)
+		elsif (ref $body and ($req_ct//'') =~ /yaml/i)
 		{
 			$req->content(Dump $body);
 			$success++;
 		}
-		elsif (ref $body eq 'HASH' and ($req->content_type//'www-form-urlencoded') =~ /www-form-urlencoded/i)
+		elsif (ref $body eq 'HASH' and ($req_ct//'urlencoded') =~ /urlencoded/i)
 		{
 			my $axwwfue = join '&',
 				map { sprintf('%s=%s', uri_escape($_), uri_escape($body->{$_})) }
 				keys %$body;
 			$req->content($axwwfue);
+			$req->content_type('application/x-www-form-urlencoded') unless $req_ct;
 			$success++;
 		}
 		else

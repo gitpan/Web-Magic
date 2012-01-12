@@ -5,14 +5,20 @@ Created:      2011-11-28
 Home page:    <https://metacpan.org/release/Web-Magic>
 Bug tracker:  <http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic>
 
+0.006  2012-01-12
+
+ - (Bugfix) Default request body to application/x-www-form-urlencoded.
+ - (Bugfix) Remove spurious warning that was added for debugging purposes
+   some time ago.
+
 0.005  2012-01-12
 
  - Throw blessed objects as exceptions.
- - (Addition) Web::Magic::Async
  - (Addition) 'querySelector' and 'querySelectorAll' methods.
+ - (Bugfix) Escape URIs properly.
  - (Documentation) Improved documentation - especially of exceptions.
  - (Packaging) Include a fairly extensive test suite.
- - (Bugfix) Escape URIs properly.
+ - (Addition) Web::Magic::Async
 
 0.004  2012-01-02
 
@@ -31,8 +37,8 @@ Bug tracker:  <http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic>
 0.002  2011-11-30
 
  - Overload stringification to return HTTP response body.
- - (Documentation) Explain how to get back the URI as a string.
  - (Documentation) Document the quote-like operator feature.
+ - (Documentation) Explain how to get back the URI as a string.
 
 0.001  2011-11-30
 # Initial release

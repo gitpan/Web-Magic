@@ -70,3 +70,15 @@ dist:v_0-005
 		dcs:item   [ rdfs:label "Escape URIs properly."@en ; a dcs:Bugfix ]
 		] .
 
+dist:project :release dist:v_0-006 .
+dist:v_0-006
+	a               :Version ;
+	dc:issued       "2012-01-12"^^xsd:date ;
+	:revision       "0.006"^^xsd:string ;
+	:file-release   <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Web-Magic-0.006.tar.gz> ;
+	dcs:changeset [
+		dcs:versus dist:v_0-005 ;
+		dcs:item   [ rdfs:label "Remove spurious warning that was added for debugging purposes some time ago."@en ; a dcs:Bugfix ] ;
+		dcs:item   [ rdfs:label "Default request body to application/x-www-form-urlencoded."@en ; a dcs:Bugfix ]
+		] .
+
