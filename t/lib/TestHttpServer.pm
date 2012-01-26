@@ -7,7 +7,7 @@ eval { require Test::HTTP::Server; 1; }
 our $server  = Test::HTTP::Server->new();
 our $baseuri = $::server->uri;
 sub baseuri { join '', $baseuri, @_; }
-#diag baseuri();
+diag baseuri() if $ENV{PERL_WEB_MAGIC_VERBOSE};
 
 sub Test::HTTP::Server::Request::ex_json {$_[0]->{out_headers}{content_type}='application/json' and <<'DATA'}
 {
@@ -101,6 +101,12 @@ DATA
 sub Test::HTTP::Server::Request::not_found {$_[0]->{out_code}='404 Not Found' and $_[0]->{out_headers}{content_type}='text/html' and <<'DATA'}
 <title property=":error">404</title>
 <p>Not found.</p>
+DATA
+
+sub Test::HTTP::Server::Request::ex_links {$_[0]->{out_headers}{content_type}='text/html' and <<'DATA'}
+<title>Example</title>
+<a href="relative">relative</a>
+<a href="http://link.example/absolute">absolute</a>
 DATA
 
 1;

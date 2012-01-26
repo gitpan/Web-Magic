@@ -4,15 +4,20 @@ use 5.010;
 use common::sense;
 use namespace::sweep; # namespace::autoclean breaks overloading
 use Object::AUTHORITY;
+use Object::DOES;
 use Object::Stash qw/_stash/;
+use Object::Tap;
 use utf8;
 
 BEGIN {
 	$Web::Magic::AUTHORITY = 'cpan:TOBYINK';
-	$Web::Magic::VERSION   = '0.006';
+	$Web::Magic::VERSION   = '0.007';
 }
 
-use JSON::JOM 0.005                qw/to_jom from_json to_json/;
+use HTTP::Date 0                   qw//;
+use HTTP::Response 0               qw//;
+use HTTP::Request 0                qw//;
+use JSON::JOM 0.501                qw/to_jom from_json to_json/;
 use JSON::JOM::Plugins::Dumper 0   qw//;
 use JSON::JOM::Plugins::JsonPath 0 qw//;
 use LWP::UserAgent 0               qw//;
@@ -30,7 +35,6 @@ use overload
 	;
 
 our %Exceptions;
-
 BEGIN
 {
 	%Exceptions = (
@@ -115,8 +119,6 @@ BEGIN {
 			cloneNode firstChild lastChild findnodes find findvalue
 			exists childNodes attributes getNamespaces
 			querySelector querySelectorAll/;
-	$F{$_} = 'to_hashref'
-		foreach qw/findNodes/;
 	$F{$_} = 'to_model'
 		foreach qw/subjects predicates objects objects_for_predicate_list
 			get_pattern get_statements count_statements get_sparql as_stream/;
@@ -132,11 +134,24 @@ BEGIN {
 		foreach qw/random_jackbauer_fact/;
 }
 
+our %XPaths;
+BEGIN {
+	%XPaths = (
+		'~links'  => '//*[(local-name()="a" or local-name()="area" or local-name()="link") and @href]',
+		'~images' => '//*[local-name()="img" and @src]',
+		);
+}
+
 sub import
 {
 	my ($class, %args) = @_;
 	
 	my $caller = caller;
+	
+	unless (exists $args{-util} and not $args{-util})
+	{
+		require Web::Magic::Util;
+	}
 	
 	if ($args{-quotelike})
 	{
@@ -182,7 +197,7 @@ sub new
 		$method = shift;
 	}
 	
-	my ($u, %args) = @_;
+	my ($u, %args) = map {"$_"} @_;
 	$u =~ s{(^\s*)|(\*$)}{}g;
 	
 	if (%args)
@@ -197,7 +212,22 @@ sub new
 	return $self;
 }
 
-sub CAN
+sub new_from_data
+{
+	my ($class, $media_type, @data) = @_;
+	
+	Web::Magic::Exception->throw("Need some data\n")
+		unless @data;
+	Web::Magic::Exception->throw("Invalid media type: $media_type\n")
+		unless $media_type =~ m{^ \w+ / \S+ $}x;
+
+	my $uri = URI->new('data:');
+	$uri->media_type($media_type);
+	$uri->data(join '', @data);
+	$class->new(GET => $uri)->do_request;
+}
+
+sub __autoload
 {
 	my ($starting_class, $func, $self, @arguments) = @_;
 	
@@ -223,15 +253,15 @@ sub CAN
 sub can
 {
 	my ($invocant, $method) = @_;
-	return $invocant->SUPER::can($method) 
-		 // __PACKAGE__->CAN($method, $invocant);
+	return __PACKAGE__->__autoload($method, $invocant)
+		// $invocant->SUPER::can($method);
 }
 
 our $AUTOLOAD;
 sub AUTOLOAD
 {
 	my ($method)   = ($AUTOLOAD =~ /::([^:]+)$/);
-	my $ref = __PACKAGE__->CAN($method, @_);
+	my $ref = __PACKAGE__->__autoload($method, @_);
 	
 	Web::Magic::Exception->throw(
 		sprintf(q{Can't locate object method "%s" via package "%s"}, $method, __PACKAGE__)
@@ -250,6 +280,12 @@ sub AUTOLOAD
 sub __deferred_load
 {
 	my $self = shift;
+	
+	# Here we enforce that this method can only be called locally.
+	my @caller = caller;
+	die "not allowed"
+		unless $caller[0] eq __PACKAGE__ && $caller[1] eq __FILE__;
+	
 	while (@_)
 	{
 		my $package = shift;
@@ -335,12 +371,80 @@ sub _ua_string
 		)
 }
 
+our $user_agent;
 sub user_agent
 {
-	my ($self) = @_;
-	my $stash = $self->_stash;
-	$stash->{user_agent} //= LWP::UserAgent->new(agent => $self->_ua_string);
-	$stash->{user_agent};
+	my $self = shift;
+	
+	if ((@_>=2 and (@_%2)==0)
+	or  (@_==1 and ref $_[0] eq 'HASH'))
+	{
+		my %args = (@_==1) ? %{$_[0]} : @_;
+		my $ua = $self->user_agent;
+		while (my ($k, $v) = each %args)
+		{
+			Web::Magic::Exception->throw(
+				sprintf('%s cannot %s', ref $ua, $k)
+				) unless $ua->can($k);
+			$ua->$k($v);
+		}
+		return $ua;
+	}
+	
+	if (blessed $self)
+	{
+		my $stash = $self->_stash;
+		
+		if (@_)
+		{
+			my $set = shift;
+			
+			Web::Magic::Exception::BadPhase->throw(
+				'Cannot set user_agent after do_request has been called.'
+				) if $self->is_requested;
+			
+			Web::Magic::Exception->throw(
+				sprintf('%s is not an LWP::UserAgent', $set)
+				) unless (blessed($set) && $set->DOES('LWP::UserAgent'))
+				      || !defined $set;
+			
+			$stash->{user_agent} = $set;
+		}
+		
+		$stash->{user_agent} //=
+			$user_agent // LWP::UserAgent->new(agent => $self->_ua_string);
+		
+		return $stash->{user_agent};
+	}
+	
+	elsif ($self->DOES(__PACKAGE__))
+	{
+		if (@_)
+		{
+			my $set = shift;
+			
+			Web::Magic::Exception->throw(
+				sprintf('%s is not an LWP::UserAgent', $set)
+				) unless (blessed($set) && $set->DOES('LWP::UserAgent'))
+				      || !defined $set;
+			
+			$user_agent = $set;
+		}
+		return $user_agent;
+	}
+	
+	else
+	{
+		die "this should not happen";
+	}
+}
+
+sub set_user_agent
+{
+	my $self = shift;
+	@_ = ({}) unless @_;
+	$self->user_agent(@_);
+	return $self;
 }
 
 sub _request_object
@@ -388,6 +492,7 @@ sub _final_request_object
 				when (/xml/)     { $ser = RDF::Trine::Serializer::RDFXML->new }
 				when (/turtle/)  { $ser = RDF::Trine::Serializer::Turtle->new }
 				when (/plain/)   { $ser = RDF::Trine::Serializer::NTriples->new }
+				when (/nquads/)  { $ser = RDF::Trine::Serializer::NQuads->new }
 				when (/json/)    { $ser = RDF::Trine::Serializer::RDFJSON->new }
 			}
 			
@@ -452,7 +557,8 @@ sub _final_request_object
 sub is_requested
 {
 	my ($self) = @_;
-	return exists $self->_stash->{response};
+	return 1 if exists $self->_stash->{response};
+	return;
 }
 
 sub _check_assertions
@@ -522,6 +628,25 @@ sub assert_success
 	return $self->assert_response(success => sub { $_->is_success });
 }
 
+sub assert_content_type
+{
+	my ($self, @types) = @_;
+	
+	if (! $self->is_requested)
+	{
+		my $req = $self->_request_object;
+		$self->set_request_header('Accept' => join q{, }, @types)
+			unless $req->header('Accept');
+	}
+	
+	return $self->assert_response(content_type => sub
+	{
+		foreach my $type (@types)
+			{ return 1 if $_->content_type eq lc $type }
+		return;
+	});
+}
+
 sub has_response_assertions
 {
 	my ($self) = @_;
@@ -571,6 +696,12 @@ sub to_hashref
 	return $stash->{hashref};
 }
 
+sub json_findnodes
+{
+	my ($self, $path) = @_;
+	return $self->to_hashref->findNodes($path);
+}
+
 sub to_dom
 {
 	my ($self) = @_;
@@ -595,7 +726,8 @@ sub to_dom
 		elsif ($self->headers->content_type =~ m{xml}i)
 		{
 			$stash->{dom} = XML::LibXML
-				->new->parse_string($self->response->decoded_content);
+				->new->parse_string($self->response->decoded_content, 
+					($self->response->base // $$self));
 		}
 		else
 		{
@@ -606,9 +738,41 @@ sub to_dom
 				content_type => $self->headers->content_type,
 				);
 		}
+		
+		$stash->{dom}->setURI( $self->response->base // $$self );
 	}
 	
 	return $stash->{dom};
+}
+
+sub findnodes
+{
+	my ($self, $xpath, @etc) = @_;
+	
+	if ($xpath =~ qr{^ ~ \w+ $}x and exists $XPaths{$xpath})
+	{
+		$xpath = $XPaths{$xpath};
+	}
+	
+	return $self->to_dom->findnodes($xpath, @etc);
+}
+
+sub _rdfa_stuff
+{
+	my ($self) = @_;
+	my $stash = $self->_stash;
+
+	$self->__deferred_load(
+		'RDF::RDFa::Parser'    => '1.096',
+		);
+
+	unless (exists $stash->{rdfa})
+	{
+		$stash->{rdfa} = RDF::RDFa::Parser->new_from_url($self->response);
+		$stash->{rdfa}->consume;
+	}
+	
+	return $stash->{rdfa};
 }
 
 sub to_model
@@ -627,9 +791,7 @@ sub to_model
 		
 		if (defined RDF::RDFa::Parser::Config->host_from_media_type($self->headers->content_type))
 		{
-			$stash->{model} = RDF::RDFa::Parser
-				->new_from_url($self->response)
-				->graph;
+			$stash->{model} = $self->_rdfa_stuff->graph;
 		}
 		else
 		{
@@ -694,14 +856,57 @@ sub cancel
 sub acme_24
 {
 	my ($self) = @_;
-	$self->__deferred_load('Acme::24'   => '0.03');
+	$self->__deferred_load('Acme::24' => '0.03');
 	return 'Acme::24';
 }
 
 sub is_cancelled
 {
 	my ($self) = @_;
-	return $self->_stash->{cancel_request};
+	return $self->_stash->{cancel_request} if $self->_stash->{cancel_request};
+	return;
+}
+
+sub save_as
+{
+	my ($self, $file) = @_;
+
+	if (-e $file and not ref $file and not $self->is_requested)
+	{
+		my $mtime = ( stat($file) )[9];
+		$self->set_request_header('If-Modified-Since' => HTTP::Date::time2str($mtime))
+			if $mtime;
+	}
+
+	if ($self->response->is_success)
+	{
+		my ($fh);
+		if (ref $file)
+		{
+			$fh = $file;
+		}
+		else
+		{
+			open $fh, '>', $file
+				or Web::Magic::Exception->throw("Cannot open '$file' for output");
+		}
+		
+		print $fh $self->response->content;
+		
+		unless (ref $file)
+		{
+			close $fh;
+			my $atime = my $mtime = do {
+				if (my $str = $self->response->header('Last-Modified'))
+					{ HTTP::Date::str2time($str) }
+				else
+					{ time() }
+				};
+			utime $atime, $mtime, $file;
+		}
+	}
+	
+	return $self;
 }
 
 sub DESTROY
@@ -714,6 +919,87 @@ sub DESTROY
 		return unless $self->has_response_assertions;
 	}
 	$self->do_request;
+}
+
+sub make_absolute_urls
+{
+	my ($self, $xpc, @xpaths) = @_;
+	
+	unless (@xpaths)
+	{
+		if ($self->header('Content-Type') =~ /html/i)
+		{
+			@xpaths = qw(
+				//xhtml:*/@href
+				//xhtml:*/@src
+				//xhtml:*/@cite
+				//xhtml:form/@action
+				//xhtml:object/@data
+				//xhtml:a/@ping
+				//xhtml:img/@longdesc
+				//xhtml:img/@lowsrc
+				//xhtml:video/@poster
+				);
+		}
+	}
+	
+	return $self unless @xpaths;
+	
+	my $dom; eval { $dom = $self->to_dom };
+	return $self unless $dom;
+	
+	unless ($xpc)
+	{
+		$xpc = XML::LibXML::XPathContext->new;
+		$xpc->registerNs(xhtml => 'http://www.w3.org/1999/xhtml')
+			if $self->header('Content-Type') =~ /html/i;
+	}
+	
+	$xpc->setContextNode($dom) unless $xpc->getContextNode;
+	
+	my @nodes = map { my @n = $xpc->findnodes($_); @n; } @xpaths;
+	
+	foreach my $node (@nodes)
+	{
+		my $base = $node->baseURI // $dom->URI;
+		
+		if ($node->isa('XML::LibXML::Attr'))
+		{
+			my $uri = URI->new_abs($node->getValue, $base);
+			$node->setValue("$uri");
+		}
+		elsif ($node->isa('XML::LibXML::Text'))
+		{
+			my $uri = URI->new_abs($node->data, $base);
+			$node->setData("$uri");
+		}
+	}
+	
+	return $self;
+}
+
+sub opengraph
+{
+	my ($self) = @_;
+	my $return;
+	
+	local $@ = undef;
+	eval
+	{
+		my $rdfa = $self->_rdfa_stuff;
+		foreach my $property ($rdfa->opengraph)
+		{
+			$return->{$property} = $rdfa->opengraph($property)
+		}
+		1;
+	}
+	or do
+	{
+		warn $@;
+		return {};
+	};
+		
+	$return;
 }
 
 'Just DWIM!';
@@ -740,7 +1026,7 @@ On the surface of it, Web::Magic appears to just perform HTTP requests,
 but it's more than that. A URL blessed into the Web::Magic package can
 be interacted with in all sorts of useful ways.
 
-=head2 Constructor
+=head2 Constructors
 
 =over
 
@@ -767,11 +1053,23 @@ Note that C<< %args >> always sets a URI query string, and does B<not>
 set the request body, B<even in the case of the POST method>. To set
 the request body, see the C<set_request_body> method.
 
+=item C<< new_from_data ($media_type, @data) >>
+
+Allows you to instantiate a Web::Magic object from a string (actually
+a list of strings, that will be joined using the empty string). But,
+if you're not actually doing HTTP with Web::Magic, then you're probably
+missing the point of Web::Magic.
+
+This works by passing the media type and data through to L<URI::data>,
+and then using the C<new> constructor. The object returned is in an
+already-requested state (i.e. C<is_requested> is true; pre-request
+methods will fail).
+
 =back
 
-=head2 Export
+=head2 Import
 
-You can import a sub to act as a shortcut for the constructor.
+You can import a sub to act as a shortcut for C<new>:
 
  use Web::Magic -sub => 'W';
  W(GET => 'http://www.google.com/search', q => 'kittens');
@@ -782,8 +1080,13 @@ You can import a sub to act as a shortcut for the constructor.
 There is experimental support for a quote-like operator similar to
 C<< q() >> or C<< qq() >>:
 
- use Web::Magic -quotelike => 'qW';
- qW(http://www.google.com/search?q=kittens);
+ use Web::Magic -quotelike => 'magic';
+ my $kittens = magic <http://www.google.com/search?q=kittens>;
+
+The quote-like operator does support interpolation, but requires the
+entire URL to be on one line (not that URLs generally contain line breaks).
+
+No shortcut is provided for C<new_from_data>.
 
 =head2 Pre-Request Methods
 
@@ -818,7 +1121,12 @@ the following are equivalent:
   $magic->POST($body);
 
 Using the latter technique, methods need to conform to this regular
-expression: C<< /^[A-Z][A-Z0-9]{0,19}$/ >>.
+expression: C<< /^[A-Z][A-Z0-9]{0,19}$/ >>. (And certain Perl built-ins
+like C<< $magic->DESTROY >>, C<< $magic->AUTOLOAD >>, etc will use their
+Perl built-in meaning. However, currently there are no conflicts between
+Perl built-ins and officially defined HTTP methods. If in doubt, the
+C<set_request_method> method will always work, as will the first parameter
+to the constructor.)
 
 This will throw a Web::Magic::Exception::BadPhase::SetRequestMethod exception
 if called on a Web::Magic object that has already been requested.
@@ -863,6 +1171,11 @@ if called on a Web::Magic object that has already been requested.
 A Web::Magic::Exception::BadPhase::Cancel exception will be thrown if the
 body can't be serialised, but not until the request is actually performed.
 
+=item C<< set_user_agent($ua) >>
+
+A variant of the C<user_agent> method (see below), which returns the invocant
+so can be used for chaining.
+
 =item C<< cancel >>
 
 This method may be called to show you do not intend for this object
@@ -901,7 +1214,9 @@ will implicitly call C<do_request> if called on an object which has
 not yet been requested.
 
 These do not typically return a reference to the invocant Web::Magic
-object, so cannot always easily be chained.
+object, so cannot always easily be chained. However, Web::Magic provides
+a C<tap> method to force chaining even with these methods. (See
+L<Object::Tap>.)
 
 =over
 
@@ -919,7 +1234,7 @@ Web::Magic overloads stringification calling this method. Thus:
 
   print W('http://www.example.com/');
 
-will print the body of 'http://www.example.com/'.
+will print the content returned from 'http://www.example.com/'.
 
 =item C<< headers >>
 
@@ -932,28 +1247,6 @@ The response headers, as an HTTP::Headers object. This is a shortcut for:
 A response header, as a string. This is a shortcut for:
 
   $magic->response->headers->header($name)
-
-=item C<< to_hashref >>
-
-Parses the response body as JSON or YAML (depending on Content-Type
-header) and returns the result as a hashref (or arrayref).
-
-Actually, technically it returns an L<JSON::JOM> object which can
-be accessed as if it were a hashref or arrayref.
-
-When a Web::Magic object is accessed as a hashref, this implicitly
-calls C<to_hashref>. So the following are equivalent:
-
-  W('http://example.com/data')->to_hashref->{people}[0]{name};
-  W('http://example.com/data')->{people}[0]{name};
-
-When C<to_hashref> is called on an unrequested Web::Magic object,
-it implicitly sets the HTTP Accept header to include JSON and YAML
-unless the Accept header has already been set.
-
-This will throw a Web::Magic::Exception::BadReponseType exception
-if the HTTP response has a Content-Type that cannot be converted to
-a hashref.
 
 =item C<< to_dom >>
 
@@ -985,7 +1278,7 @@ call C<to_dom> (see L<XML::LibXML::Document>):
 
 =item * C<lastChild>
 
-=item * C<findnodes>
+=item * C<findnodes> (but see below)
 
 =item * C<find>
 
@@ -1020,6 +1313,123 @@ L<XML::LibXML::QuerySelector> for further details.
 This will throw a Web::Magic::Exception::BadReponseType exception
 if the HTTP response has a Content-Type that cannot be converted to
 a DOM.
+
+=item C<< findnodes($xpath) >>
+
+If C<< $xpath >> matches C<< /^[~]\w+$/ >> then, it is looked up in
+C<< %Web::Magic::XPaths >> which is a hash of useful XPaths.
+
+ $magic->findnodes('~links')   # //a[@href], //link[@href], etc
+ $magic->findnodes('~images')  # //img[@src]
+
+Future versions of Web::Magic should add more.
+
+=item C<< make_absolute_urls($xpath_context, @xpaths) >>
+
+Replaces relative URLs with absolute ones. Currently this only affects
+the data you get back from C<to_dom> and friends. (That is, if you call
+C<content> you'll see the original relative URLs.)
+
+C<< $xpath_context >> should be an XML::LibXML::XPathContext object.
+If undefined, a suitable default will be created automatically based
+on the namespaces defined in the document. If the document was served
+with a media type matching the regular expression C<< /html/i >> then
+this automatic context will include the XHTML namespace bound to the
+prefix "xhtml".
+
+C<< @xpaths >> is a list of XPaths which should select attributes
+and/or text nodes. (Any other nodes selected, such as element nodes,
+will be ignored.) If called with the empty list, then for media types
+matching C<< /html/i >>, a default list is used:
+
+ qw(
+   //xhtml:*/@href
+   //xhtml:*/@src
+   //xhtml:*/@cite
+   //xhtml:form/@action
+   //xhtml:object/@data
+   //xhtml:a/@ping
+   //xhtml:img/@longdesc
+   //xhtml:img/@lowsrc
+   //xhtml:video/@poster
+   );
+
+Because of the defaults, using this method with (X)HTML is very easy:
+
+ my $dom = W(GET => 'http://example.com/document.html')
+   -> User_Agent('MyFoo/0.001')
+   -> assert_success
+   -> make_absolute_urls
+   -> to_dom;
+
+C<make_absolute_urls> defers to XML::LibXML and HTTP::Response to determine
+the correct base URL. These should do the right thing with C<xml:base>
+attributes, the HTML C<< <base> >> element and the C<Content-Location> and
+C<Content-Base> HTTP headers, but I'm sure if you try hard enough, you could
+trick it.
+
+Note that hunting for every single relative URL in the DOM, and replacing them
+all with absolute URLs is often overkill. It may be more efficient to find just
+the URLs you need and make them absolute like this:
+
+ my $link = do { ... some code that selects an element ... };
+ my $abs  = URI->new_abs(
+   $link->getAttribute('href'),
+   ($link->baseURI // $link->ownerDocument->URI),
+   );
+
+You could even consider monkey-patching XML::LibXML to do the work for you:
+
+ sub XML::LibXML::Element::getAttributeURI
+ {
+   my ($self, $attr) = @_;
+   URI->new_abs(
+     $self->getAttribute($attr),
+     ($self->baseURI // $self->ownerDocument->URI),
+     );
+ }
+
+But C<make_absolute_urls> is nice for quick scripts where efficient
+coding is more important than efficient execution.
+
+This method returns the invocant, so is suitable for chaining.
+
+=item C<< to_hashref >>
+
+Parses the response body as JSON or YAML (depending on Content-Type
+header) and returns the result as a hashref (or arrayref).
+
+Actually, technically it returns an L<JSON::JOM> object which can
+be accessed as if it were a hashref or arrayref.
+
+When a Web::Magic object is accessed as a hashref, this implicitly
+calls C<to_hashref>. So the following are equivalent:
+
+  W('http://example.com/data')->to_hashref->{people}[0]{name};
+  W('http://example.com/data')->{people}[0]{name};
+
+When C<to_hashref> is called on an unrequested Web::Magic object,
+it implicitly sets the HTTP Accept header to include JSON and YAML
+unless the Accept header has already been set.
+
+This will throw a Web::Magic::Exception::BadReponseType exception
+if the HTTP response has a Content-Type that cannot be converted to
+a hashref.
+
+=item C<< json_findnodes($jsonpath) >>
+
+Finds nodes in the structure returned by C<to_hashref> using JsonPath. This
+is actually a shortcut for:
+
+ $magic->to_hashref->findNodes
+
+Earlier versions of Web::Magic supported this functionality using a method
+called C<findNodes>, but this was not documented because the idea of two
+different functions which differed only in case (C<findNodes> and
+C<findnodes>) was so horrible. Thus it has become C<json_findnodes> and
+is now documented.
+
+See also L<JSON::JOM::Plugins::JsonPath> and L<JSON::Path>.
 
 =item C<< to_model >>
 
@@ -1061,6 +1471,13 @@ So, for example, the following are equivalent:
   W('http://example.com/')->to_model->get_pattern($pattern);
   W('http://example.com/')->get_pattern($pattern);
 
+=item C<< opengraph >>
+
+Returns a hashref of Open Graph Protocol data for the page, or if unable to,
+an empty hashref.
+
+See also L<http://ogp.me/>.
+
 =item C<< to_feed >>
 
 Parses the response body as Atom or RSS (depending on Content-Type
@@ -1083,6 +1500,26 @@ So, for example, the following are equivalent:
 
   W('http://example.com/feed.atom')->to_feed->entries;
   W('http://example.com/feed.atom')->entries;
+
+=item C<< save_as($file) >>
+
+Saves the raw content retrieved from the URL to a file. May be passed a file
+handle or a file name.
+
+If called pre-request, then will trigger C<do_request>.
+
+If called pre-request with a file name, will set the If-Modified-Since
+HTTP request header to that file's mtime.
+
+If passed a file name, then additionally sets the file's mtime and atime
+to the date from the HTTP Last-Modified response header.
+
+If the response is not a sucess (HTTP 2xx code) then acts as a no-op.
+
+This method returns the invocant, so may be chained.
+
+L<LWP::UserAgent>'s C<mirror> method is perhaps somewhat more sophisticated,
+but only supports the HTTP GET method.
 
 =back
 
@@ -1175,6 +1612,17 @@ A shortcut for:
 
 This checks the HTTP response has a 2XX HTTP status code.
 
+=item C<< assert_content_type(@types) >>
+
+Another shortcut for a common assertion - checks that the response
+HTTP Content-Type header is as expected.
+
+If called before the request has been issued, then this method will
+also set an HTTP Accept header for the request. (But if you've set one
+manually, it will not over-ride it.)
+
+ $magic->assert_content_type(qw{ text/html application/xhtml+xml })
+
 =item C<< has_response_assertions >>
 
 Returns true if the Web::Magic object has had any response
@@ -1182,8 +1630,49 @@ assertions made. (In fact, returns the number of such assertions.)
 
 =item C<< user_agent >>
 
-Returns the L<LWP::UserAgent> that will be used (or has been used)
+Get/set the L<LWP::UserAgent> that will be used (or has been used)
 to issue the request.
+
+  $magic->user_agent($ua);      # set
+  my $ua = $magic->user_agent;  # get
+
+If called as a setter on a Web::Magic object that has already been requested,
+then throws a Web::Magic::Exception::BadPhase exception.
+
+If passed a hashref instead of a blessed user agent, Web::Magic will keep the
+existing user agent but use the hashref to set attributes for it.
+
+  $magic->user_agent({
+    from          => 'tobyink@cpan.org',
+    max_redirect  => 3,
+    });
+  
+  # the above is a shortcut for:
+  $magic->user_agent->from('tobyink@cpan.org');
+  $magic->user_agent->max_redirect(3);
+
+Usually a new user agent is instantiated for each request. It is possible to
+set a global user agent to use as the default UA for all future requests:
+
+  Web::Magic->user_agent( LWP::UserAgent->new(...) );
+
+This may be useful for caching, retaining cookies between requests, etc. When
+a global user agent is defined, it is still possible to set user_agent on 
+individual user_agent instances. You can clear the global user agent using
+
+  Web::Magic->user_agent( undef );
+
+As an alternative way of accessing the global user agent, you can use the
+package variable.
+
+  $Web::Magic::user_agent = LWP::UserAgent->new(...);
+
+This has the advantage that changes can be localised using Perl's C<local>
+keyword, but it skips validation logic in the getter/setter so needs to be
+used with caution.
+
+Throws a Web::Magic::Exception if called as a setter and passed a defined but
+non-LWP::UserAgent value.
 
 =item C<< acme_24 >>
 
@@ -1323,6 +1812,69 @@ B<Cause:> cannot coerce from an HTTP message body to a Perl object, because is i
 
 B<Additional fields:> content_type.
 
+=head1 NOTES
+
+=head2 Use of upper/lower case in method names
+
+At first glance, Web::Magic seems a little chaotic...
+
+  Web::Magic
+    ->new('https://metacpan.org/')
+    ->User_Agent('MyExample/0.1')
+    ->GET
+    ->make_absolute_urls
+    ->querySelectorAll('a[rel="stylesheet"]')
+    ->foreach(sub{ say $_->getAttribute('href') })
+
+But there is actually a logic to it.
+
+=over
+
+=item * Methods that set HTTP request methods (as well as certain Perl
+built-ins - C<DESTROY>, etc) are I<UPPERCASE>. That is, they follow the case
+conventionally used in HTTP over the wire.
+
+=item * Methods that set HTTP request headers are
+I<Title_Case_With_Underscores>. That is, they follow the case
+conventionally used in HTTP over the wire, just substituting hyphens for
+underscores.
+
+=item * Methods delegated to other Perl modules (e.g. C<getElementsByTagName>
+from XML::LibXML::Node and C<get_statements> from RDF::Trine::Model) are named
+exactly as they are in their parent package. This is usually I<lowerCameCase>
+or I<lower_case_with_underscores>.
+
+=item * All other methods use the One True Way: I<lower_case_with_underscores>.
+
+=back
+
+=head2 Haven't I seen something like this before?
+
+Web::Magic is inspired in equal parts by L<http://jquery.com/|jQuery>, by
+modules that take good advantage of chaining (such as L<Class::Path::Rule>),
+and by the great modules Web::Magic depends on (L<LWP>,  L<RDF::Trine>,
+L<URI>, L<XML::LibXML>, etc).
+
+Some parts of it are quite jQuery-like, such as the ability to select XML
+and HTML nodes using CSS selectors, and you may recognise this ability from
+other jQuery-inspired Perl modules such as L<pQuery>, L<Web::Query>,
+L<HTML::Query> and L<App::scrape>. But while these modules focus on HTML
+(and to a certain extent XML), Web::Magic aims to offer a similar level 
+coolness for RDF, JSON and feeds. (That is, it is not only useful for the
+Web of Documents, but also the Web of Data, and REST APIs.)
+
+Web::Magic may also seem to share some of the properties of L<WWW::Mechanize>,
+in that it downloads stuff and does things with it. But Web::Magic and
+WWW::Mechanize use quite different models of the world. WWW::Mechanize gives
+you a single object that is used for multiple HTTP requests, maintaining
+state between them; Web::Magic uses an object per HTTP request, and by
+default no state is kept between them (for RESTful resources, there should
+be no need to). It should be quite easy to use them together, as Web::Magic
+allows you to set a custom user agent for HTTP requests, and WWW::Mechanize
+is a subclass of LWP::UserAgent:
+
+ local $Web::Magic::user_agent = WWW::Mechanize->new(...);
+
 =head1 BUGS
 
 Inumerable, almost certainly.
@@ -1336,7 +1888,8 @@ L<Web::Magic::Async>.
 
 L<LWP::UserAgent>, L<URI>, L<HTTP::Request>, L<HTTP::Response>.
 
-L<XML::LibXML>, L<JSON::JOM>, L<RDF::Trine>, L<XML::Feed>.
+L<XML::LibXML>, L<XML::LibXML::QuerySelector>, L<JSON::JOM>, L<RDF::Trine>,
+L<XML::Feed>.
 
 =head1 AUTHOR
 

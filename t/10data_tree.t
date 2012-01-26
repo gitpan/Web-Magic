@@ -30,7 +30,7 @@ is(
 	'JSON::JOM support',
 	);
 is(
-	($yaml->findNodes("\$['ship-to']['family']"))[0],
+	($yaml->json_findnodes("\$['ship-to']['family']"))[0],
 	'Dumars',
-	'findNodes works',
+	'json_findnodes works',
 	);

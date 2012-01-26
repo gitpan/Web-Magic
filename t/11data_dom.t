@@ -5,7 +5,7 @@ use lib "t/lib";
 use Web::Magic -sub => 'W';
 use TestHttpServer;
 
-plan tests => 5;
+plan tests => 8;
 
 my $html = W( baseuri('ex_html') );
 isa_ok($html->documentElement, 'XML::LibXML::Node');
@@ -27,3 +27,12 @@ my $exception = $@;
 
 isa_ok $exception, 'Web::Magic::Exception::BadReponseType',
 	"attempting to parse JSON as a DOM throws exception which";
+
+my @links = W( baseuri('ex_links') )
+	->assert_success
+	->make_absolute_urls
+	->querySelectorAll('a[href]');
+
+is(scalar @links, 2, 'querySelectorAll');
+like($links[0]->getAttribute('href'), qr{^http://}, 'make_absolute_urls (relative)');
+is($links[1]->getAttribute('href'), 'http://link.example/absolute', 'make_absolute_urls (absolute)');

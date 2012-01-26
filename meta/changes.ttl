@@ -82,3 +82,27 @@ dist:v_0-006
 		dcs:item   [ rdfs:label "Default request body to application/x-www-form-urlencoded."@en ; a dcs:Bugfix ]
 		] .
 
+dist:project :release dist:v_0-007 .
+dist:v_0-007
+	a               :Version ;
+	dc:issued       "2012-01-26"^^xsd:date ;
+	:revision       "0.007"^^xsd:string ;
+	:file-release   <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Web-Magic-0.007.tar.gz> ;
+	rdfs:label      "Happy Australia Day!" ;
+	dcs:changeset [
+		dcs:versus dist:v_0-006 ;
+		dcs:item   [ rdfs:label "When parsing response body as a DOM, call $document->setURI to set the document URI."@en ] ;
+		dcs:item   [ rdfs:label "make_absolute_urls method"@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "opengraph method"@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "tap method"@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "assert_content_type method"@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "%Web::Magic::XPaths"@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "set_user_agent method"@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "save_as method"@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "rename findNodes method to json_findnodes, and document it"@en ] ;
+		dcs:item   [ rdfs:label "new_from_data constructor"@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "Added NOTES section."@en ; a dcs:Addition, dcs:Documentation ] ;
+		dcs:item   [ rdfs:label "Make user_agent into a setter (not just a getter)."@en ] ;
+		dcs:item   [ rdfs:label "$Web::Magic::user_agent is the default user agent."@en ] ;
+		] .
+

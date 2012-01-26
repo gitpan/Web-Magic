@@ -15,7 +15,7 @@ DESCRIPTION
     but it's more than that. A URL blessed into the Web::Magic package can
     be interacted with in all sorts of useful ways.
 
-  Constructor
+  Constructors
     "new ([$method,] $uri [, %args])"
         $method is the HTTP method to use with the URI, such as 'GET',
         'POST', 'PUT' or 'DELETE'. The HTTP method must be capitalised to
@@ -38,8 +38,19 @@ DESCRIPTION
         request body, even in the case of the POST method. To set the
         request body, see the "set_request_body" method.
 
-  Export
-    You can import a sub to act as a shortcut for the constructor.
+    "new_from_data ($media_type, @data)"
+        Allows you to instantiate a Web::Magic object from a string
+        (actually a list of strings, that will be joined using the empty
+        string). But, if you're not actually doing HTTP with Web::Magic,
+        then you're probably missing the point of Web::Magic.
+
+        This works by passing the media type and data through to URI::data,
+        and then using the "new" constructor. The object returned is in an
+        already-requested state (i.e. "is_requested" is true; pre-request
+        methods will fail).
+
+  Import
+    You can import a sub to act as a shortcut for "new":
 
      use Web::Magic -sub => 'W';
      W(GET => 'http://www.google.com/search', q => 'kittens');
@@ -50,8 +61,14 @@ DESCRIPTION
     There is experimental support for a quote-like operator similar to "q()"
     or "qq()":
 
-     use Web::Magic -quotelike => 'qW';
-     qW(http://www.google.com/search?q=kittens);
+     use Web::Magic -quotelike => 'magic';
+     my $kittens = magic <http://www.google.com/search?q=kittens>;
+
+    The quote-like operator does support interpolation, but requires the
+    entire URL to be on one line (not that URLs generally contain line
+    breaks).
+
+    No shortcut is provided for "new_from_data".
 
   Pre-Request Methods
     Constructing a Web::Magic object doesn't actually perform a request for
@@ -82,7 +99,12 @@ DESCRIPTION
           $magic->POST($body);
 
         Using the latter technique, methods need to conform to this regular
-        expression: "/^[A-Z][A-Z0-9]{0,19}$/".
+        expression: "/^[A-Z][A-Z0-9]{0,19}$/". (And certain Perl built-ins
+        like "$magic->DESTROY", "$magic->AUTOLOAD", etc will use their Perl
+        built-in meaning. However, currently there are no conflicts between
+        Perl built-ins and officially defined HTTP methods. If in doubt, the
+        "set_request_method" method will always work, as will the first
+        parameter to the constructor.)
 
         This will throw a Web::Magic::Exception::BadPhase::SetRequestMethod
         exception if called on a Web::Magic object that has already been
@@ -130,6 +152,10 @@ DESCRIPTION
         if the body can't be serialised, but not until the request is
         actually performed.
 
+    "set_user_agent($ua)"
+        A variant of the "user_agent" method (see below), which returns the
+        invocant so can be used for chaining.
+
     "cancel"
         This method may be called to show you do not intend for this object
         to be requested. Attempting to request an object that has been
@@ -164,7 +190,9 @@ DESCRIPTION
     yet been requested.
 
     These do not typically return a reference to the invocant Web::Magic
-    object, so cannot always easily be chained.
+    object, so cannot always easily be chained. However, Web::Magic provides
+    a "tap" method to force chaining even with these methods. (See
+    Object::Tap.)
 
     "response"
         The response, as an HTTP::Response object.
@@ -178,7 +206,7 @@ DESCRIPTION
 
           print W('http://www.example.com/');
 
-        will print the body of 'http://www.example.com/'.
+        will print the content returned from 'http://www.example.com/'.
 
     "headers"
         The response headers, as an HTTP::Headers object. This is a shortcut
@@ -190,27 +218,6 @@ DESCRIPTION
         A response header, as a string. This is a shortcut for:
 
           $magic->response->headers->header($name)
-
-    "to_hashref"
-        Parses the response body as JSON or YAML (depending on Content-Type
-        header) and returns the result as a hashref (or arrayref).
-
-        Actually, technically it returns an JSON::JOM object which can be
-        accessed as if it were a hashref or arrayref.
-
-        When a Web::Magic object is accessed as a hashref, this implicitly
-        calls "to_hashref". So the following are equivalent:
-
-          W('http://example.com/data')->to_hashref->{people}[0]{name};
-          W('http://example.com/data')->{people}[0]{name};
-
-        When "to_hashref" is called on an unrequested Web::Magic object, it
-        implicitly sets the HTTP Accept header to include JSON and YAML
-        unless the Accept header has already been set.
-
-        This will throw a Web::Magic::Exception::BadReponseType exception if
-        the HTTP response has a Content-Type that cannot be converted to a
-        hashref.
 
     "to_dom"
         Parses the response body as XML or HTML (depending on Content-Type
@@ -239,7 +246,7 @@ DESCRIPTION
 
         *   "lastChild"
 
-        *   "findnodes"
+        *   "findnodes" (but see below)
 
         *   "find"
 
@@ -272,6 +279,122 @@ DESCRIPTION
         This will throw a Web::Magic::Exception::BadReponseType exception if
         the HTTP response has a Content-Type that cannot be converted to a
         DOM.
+
+    "findnodes($xpath)"
+        If $xpath matches "/^[~]\w+$/" then, it is looked up in
+        %Web::Magic::XPaths which is a hash of useful XPaths.
+
+         $magic->findnodes('~links')   # //a[@href], //link[@href], etc
+         $magic->findnodes('~images')  # //img[@src]
+
+        Future versions of Web::Magic should add more.
+
+    "make_absolute_urls($xpath_context, @xpaths)"
+        Replaces relative URLs with absolute ones. Currently this only
+        affects the data you get back from "to_dom" and friends. (That is,
+        if you call "content" you'll see the original relative URLs.)
+
+        $xpath_context should be an XML::LibXML::XPathContext object. If
+        undefined, a suitable default will be created automatically based on
+        the namespaces defined in the document. If the document was served
+        with a media type matching the regular expression "/html/i" then
+        this automatic context will include the XHTML namespace bound to the
+        prefix "xhtml".
+
+        @xpaths is a list of XPaths which should select attributes and/or
+        text nodes. (Any other nodes selected, such as element nodes, will
+        be ignored.) If called with the empty list, then for media types
+        matching "/html/i", a default list is used:
+
+         qw(
+           //xhtml:*/@href
+           //xhtml:*/@src
+           //xhtml:*/@cite
+           //xhtml:form/@action
+           //xhtml:object/@data
+           //xhtml:a/@ping
+           //xhtml:img/@longdesc
+           //xhtml:img/@lowsrc
+           //xhtml:video/@poster
+           );
+
+        Because of the defaults, using this method with (X)HTML is very
+        easy:
+
+         my $dom = W(GET => 'http://example.com/document.html')
+           -> User_Agent('MyFoo/0.001')
+           -> assert_success
+           -> make_absolute_urls
+           -> to_dom;
+
+        "make_absolute_urls" defers to XML::LibXML and HTTP::Response to
+        determine the correct base URL. These should do the right thing with
+        "xml:base" attributes, the HTML "<base>" element and the
+        "Content-Location" and "Content-Base" HTTP headers, but I'm sure if
+        you try hard enough, you could trick it.
+
+        Note that hunting for every single relative URL in the DOM, and
+        replacing them all with absolute URLs is often overkill. It may be
+        more efficient to find just the URLs you need and make them absolute
+        like this:
+
+         my $link = do { ... some code that selects an element ... };
+         my $abs  = URI->new_abs(
+           $link->getAttribute('href'),
+           ($link->baseURI // $link->ownerDocument->URI),
+           );
+
+        You could even consider monkey-patching XML::LibXML to do the work
+        for you:
+
+         sub XML::LibXML::Element::getAttributeURI
+         {
+           my ($self, $attr) = @_;
+           URI->new_abs(
+             $self->getAttribute($attr),
+             ($self->baseURI // $self->ownerDocument->URI),
+             );
+         }
+
+        But "make_absolute_urls" is nice for quick scripts where efficient
+        coding is more important than efficient execution.
+
+        This method returns the invocant, so is suitable for chaining.
+
+    "to_hashref"
+        Parses the response body as JSON or YAML (depending on Content-Type
+        header) and returns the result as a hashref (or arrayref).
+
+        Actually, technically it returns an JSON::JOM object which can be
+        accessed as if it were a hashref or arrayref.
+
+        When a Web::Magic object is accessed as a hashref, this implicitly
+        calls "to_hashref". So the following are equivalent:
+
+          W('http://example.com/data')->to_hashref->{people}[0]{name};
+          W('http://example.com/data')->{people}[0]{name};
+
+        When "to_hashref" is called on an unrequested Web::Magic object, it
+        implicitly sets the HTTP Accept header to include JSON and YAML
+        unless the Accept header has already been set.
+
+        This will throw a Web::Magic::Exception::BadReponseType exception if
+        the HTTP response has a Content-Type that cannot be converted to a
+        hashref.
+
+    "json_findnodes($jsonpath)"
+        Finds nodes in the structure returned by "to_hashref" using
+        JsonPath. This is actually a shortcut for:
+
+         $magic->to_hashref->findNodes
+
+        Earlier versions of Web::Magic supported this functionality using a
+        method called "findNodes", but this was not documented because the
+        idea of two different functions which differed only in case
+        ("findNodes" and "findnodes") was so horrible. Thus it has become
+        "json_findnodes" and is now documented.
+
+        See also JSON::JOM::Plugins::JsonPath and JSON::Path.
 
     "to_model"
         Parses the response body as RDF/XML, Turtle, RDF/JSON or RDFa
@@ -308,6 +431,12 @@ DESCRIPTION
           W('http://example.com/')->to_model->get_pattern($pattern);
           W('http://example.com/')->get_pattern($pattern);
 
+    "opengraph"
+        Returns a hashref of Open Graph Protocol data for the page, or if
+        unable to, an empty hashref.
+
+        See also <http://ogp.me/>.
+
     "to_feed"
         Parses the response body as Atom or RSS (depending on Content-Type
         header) and returns the result as an XML::Feed.
@@ -325,6 +454,26 @@ DESCRIPTION
 
           W('http://example.com/feed.atom')->to_feed->entries;
           W('http://example.com/feed.atom')->entries;
+
+    "save_as($file)"
+        Saves the raw content retrieved from the URL to a file. May be
+        passed a file handle or a file name.
+
+        If called pre-request, then will trigger "do_request".
+
+        If called pre-request with a file name, will set the
+        If-Modified-Since HTTP request header to that file's mtime.
+
+        If passed a file name, then additionally sets the file's mtime and
+        atime to the date from the HTTP Last-Modified response header.
+
+        If the response is not a sucess (HTTP 2xx code) then acts as a
+        no-op.
+
+        This method returns the invocant, so may be chained.
+
+        LWP::UserAgent's "mirror" method is perhaps somewhat more
+        sophisticated, but only supports the HTTP GET method.
 
   Any Time Methods
     These can be called either before or after the request, and do not
@@ -403,13 +552,67 @@ DESCRIPTION
 
         This checks the HTTP response has a 2XX HTTP status code.
 
+    "assert_content_type(@types)"
+        Another shortcut for a common assertion - checks that the response
+        HTTP Content-Type header is as expected.
+
+        If called before the request has been issued, then this method will
+        also set an HTTP Accept header for the request. (But if you've set
+        one manually, it will not over-ride it.)
+
+         $magic->assert_content_type(qw{ text/html application/xhtml+xml })
+
     "has_response_assertions"
         Returns true if the Web::Magic object has had any response
         assertions made. (In fact, returns the number of such assertions.)
 
     "user_agent"
-        Returns the LWP::UserAgent that will be used (or has been used) to
+        Get/set the LWP::UserAgent that will be used (or has been used) to
         issue the request.
+
+          $magic->user_agent($ua);      # set
+          my $ua = $magic->user_agent;  # get
+
+        If called as a setter on a Web::Magic object that has already been
+        requested, then throws a Web::Magic::Exception::BadPhase exception.
+
+        If passed a hashref instead of a blessed user agent, Web::Magic will
+        keep the existing user agent but use the hashref to set attributes
+        for it.
+
+          $magic->user_agent({
+            from          => 'tobyink@cpan.org',
+            max_redirect  => 3,
+            });
+  
+          # the above is a shortcut for:
+          $magic->user_agent->from('tobyink@cpan.org');
+          $magic->user_agent->max_redirect(3);
+
+        Usually a new user agent is instantiated for each request. It is
+        possible to set a global user agent to use as the default UA for all
+        future requests:
+
+          Web::Magic->user_agent( LWP::UserAgent->new(...) );
+
+        This may be useful for caching, retaining cookies between requests,
+        etc. When a global user agent is defined, it is still possible to
+        set user_agent on individual user_agent instances. You can clear the
+        global user agent using
+
+          Web::Magic->user_agent( undef );
+
+        As an alternative way of accessing the global user agent, you can
+        use the package variable.
+
+          $Web::Magic::user_agent = LWP::UserAgent->new(...);
+
+        This has the advantage that changes can be localised using Perl's
+        "local" keyword, but it skips validation logic in the getter/setter
+        so needs to be used with caution.
+
+        Throws a Web::Magic::Exception if called as a setter and passed a
+        defined but non-LWP::UserAgent value.
 
     "acme_24"
         Returns the string 'Acme::24'.
@@ -524,6 +727,64 @@ DESCRIPTION
 
     Additional fields: content_type.
 
+NOTES
+  Use of upper/lower case in method names
+    At first glance, Web::Magic seems a little chaotic...
+
+      Web::Magic
+        ->new('https://metacpan.org/')
+        ->User_Agent('MyExample/0.1')
+        ->GET
+        ->make_absolute_urls
+        ->querySelectorAll('a[rel="stylesheet"]')
+        ->foreach(sub{ say $_->getAttribute('href') })
+
+    But there is actually a logic to it.
+
+    *   Methods that set HTTP request methods (as well as certain Perl
+        built-ins - "DESTROY", etc) are *UPPERCASE*. That is, they follow
+        the case conventionally used in HTTP over the wire.
+
+    *   Methods that set HTTP request headers are
+        *Title_Case_With_Underscores*. That is, they follow the case
+        conventionally used in HTTP over the wire, just substituting hyphens
+        for underscores.
+
+    *   Methods delegated to other Perl modules (e.g. "getElementsByTagName"
+        from XML::LibXML::Node and "get_statements" from RDF::Trine::Model)
+        are named exactly as they are in their parent package. This is
+        usually *lowerCameCase* or *lower_case_with_underscores*.
+
+    *   All other methods use the One True Way:
+        *lower_case_with_underscores*.
+
+  Haven't I seen something like this before?
+    Web::Magic is inspired in equal parts by <http://jquery.com/|jQuery>, by
+    modules that take good advantage of chaining (such as
+    Class::Path::Rule), and by the great modules Web::Magic depends on (LWP,
+    RDF::Trine, URI, XML::LibXML, etc).
+
+    Some parts of it are quite jQuery-like, such as the ability to select
+    XML and HTML nodes using CSS selectors, and you may recognise this
+    ability from other jQuery-inspired Perl modules such as pQuery,
+    Web::Query, HTML::Query and App::scrape. But while these modules focus
+    on HTML (and to a certain extent XML), Web::Magic aims to offer a
+    similar level coolness for RDF, JSON and feeds. (That is, it is not only
+    useful for the Web of Documents, but also the Web of Data, and REST
+    APIs.)
+
+    Web::Magic may also seem to share some of the properties of
+    WWW::Mechanize, in that it downloads stuff and does things with it. But
+    Web::Magic and WWW::Mechanize use quite different models of the world.
+    WWW::Mechanize gives you a single object that is used for multiple HTTP
+    requests, maintaining state between them; Web::Magic uses an object per
+    HTTP request, and by default no state is kept between them (for RESTful
+    resources, there should be no need to). It should be quite easy to use
+    them together, as Web::Magic allows you to set a custom user agent for
+    HTTP requests, and WWW::Mechanize is a subclass of LWP::UserAgent:
+
+     local $Web::Magic::user_agent = WWW::Mechanize->new(...);
+
 BUGS
     Inumerable, almost certainly.
 
@@ -535,7 +796,8 @@ SEE ALSO
 
     LWP::UserAgent, URI, HTTP::Request, HTTP::Response.
 
-    XML::LibXML, JSON::JOM, RDF::Trine, XML::Feed.
+    XML::LibXML, XML::LibXML::QuerySelector, JSON::JOM, RDF::Trine,
+    XML::Feed.
 
 AUTHOR
     Toby Inkster <tobyink@cpan.org>.

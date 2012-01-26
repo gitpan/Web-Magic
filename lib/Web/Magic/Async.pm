@@ -7,7 +7,7 @@ use utf8;
 
 BEGIN {
 	$Web::Magic::Async::AUTHORITY = 'cpan:TOBYINK';
-	$Web::Magic::Async::VERSION   = '0.006';
+	$Web::Magic::Async::VERSION   = '0.007';
 }
 
 use AnyEvent::HTTP;
@@ -55,6 +55,12 @@ sub do_request
 	}
 	
 	$self;
+}
+
+sub user_agent
+{
+	my ($self) = @_;
+	Web::Magic::Exception->throw('Web::Magic::Async does not use LWP::UserAgent');
 }
 
 sub _cancel_progress
@@ -247,6 +253,11 @@ This method does not exist in Web::Magic itself.
 Usually, this will throw an error if called on a Web::Magic object that
 has already been requested. Asynchronous requests can be cancelled while
 they are still in progress, but not once they are complete.
+
+=item C<< user_agent >>
+
+Web::Magic::Async does not use LWP::UserAgent, so this method throws a
+Web::Magic::Exception.
 
 =back
 
