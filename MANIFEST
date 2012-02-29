@@ -3,9 +3,11 @@ examples/absolutize.pl
 examples/absolutize2.pl
 examples/assert-async.pl
 examples/assert.pl
+examples/form-data.pl
 examples/opengraph.pl
 examples/quote-like.pl
 examples/stuff.pl
+examples/tap.pl
 inc/Module/AutoInstall.pm
 inc/Module/Install.pm
 inc/Module/Install/AutoInstall.pm
@@ -27,6 +29,7 @@ inc/Scalar/Util/PP.pm
 inc/YAML/Tiny.pm
 lib/Web/Magic.pm
 lib/Web/Magic/Async.pm
+lib/Web/Magic/Examples.pod
 lib/Web/Magic/Util.pm
 LICENSE
 Makefile.PL
@@ -41,6 +44,7 @@ t/02http.t
 t/03ua.t
 t/04datauri.t
 t/05saveas.t
+t/06httpreq.t
 t/10data_tree.t
 t/11data_dom.t
 t/12data_rdf.t

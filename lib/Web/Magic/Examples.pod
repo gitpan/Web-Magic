@@ -1,0 +1,365 @@
+=head1 NAME
+
+Web::Magic::Examples - using Web::Magic in practice
+
+=head1 ASSUMPTIONS
+
+Most of these examples assume you have something like this near the top of
+your script:
+
+ use 5.010;
+ use strict;
+ use utf8::all;
+ use Web::Magic -quotelike => 'web';
+
+=head1 WEB::MAGIC VERSUS MECH
+
+=head2 Bulk Downloading
+
+Mech:
+
+ #!/usr/bin/perl -w
+ 
+ use strict;
+ use WWW::Mechanize;
+ 
+ my $start = "http://www.stevemcconnell.com/cc2/cc.htm";
+ 
+ my $mech = WWW::Mechanize->new( autocheck => 1 );
+ $mech->get( $start );
+ 
+ my @links = $mech->find_all_links( url_regex => qr/\d+.+\.pdf$/ );
+ 
+ for my $link ( @links ) {
+   my $url = $link->url_abs;
+   my $filename = $url;
+   $filename =~ s[^.+/][];
+   
+   print "Fetching $url";
+   $mech->get( $url, ':content_file' => $filename );
+   
+   print "   ", -s $filename, " bytes\n";
+ }
+
+Web::Magic:
+
+ web <http://www.stevemcconnell.com/cc2/cc.htm>
+   -> assert_success
+   -> findnodes('~links')
+   -> map(sub { Web::Magic->new($_) })
+   -> grep(sub { $_->uri =~ /.pdf$/ })
+   -> foreach(sub {
+        printf("Fetching %s", $_->uri);
+        my $filename = ($_->uri->path_segments)[-1]
+        $_->save_as($filename);
+        printf("   %d bytes\n", -s $filename);
+      });
+
+This example (from the Mech documentation) doesn't actually work now,
+as Steve McConnell has reorganised his website.
+
+=head1 WEB::MAGIC VERSUS MOJO
+
+=head2 Web scraping
+
+Mojo:
+
+  # Fetch web site
+  my $ua = Mojo::UserAgent->new;
+  my $tx = $ua->get('mojolicio.us/perldoc');
+
+  # Extract title
+  say 'Title: ', $tx->res->dom->at('head > title')->text;
+
+  # Extract headings
+  $tx->res->dom('h1, h2, h3')->each(sub {
+    say 'Heading: ', shift->all_text;
+  });
+
+Web::Magic doesn't look radically different:
+
+ my $tx = web <http://mojolicio.us/perldoc>;
+ 
+ say "Title: ", $tx->querySelector('head > title')->textContent;
+ 
+ $tx->querySelectorAll('h1, h2, h3')->foreach(sub {
+   say 'Heading: ', $_->textContent;
+ });
+
+One interesting feature is that it's not until the "say" line that Web::Magic
+actually performs a network request. That means that it's "cheap" to do things
+like this in Web::Magic:
+
+ my $r1 = web <http://example.com/r1>;
+ my $r2 = web <http://example.com/r2>;
+ say($config->{choice} ? $r1 : $r2);
+
+Web::Magic won't waste resources by fetching both C<< $r1 >> and C<< $r2 >>.
+Instantiating a Web::Magic object is not much more expensive than a L<URI>
+object.
+
+=head2 JSON web services
+
+Mojo:
+
+  # Fresh user agent
+  my $ua = Mojo::UserAgent->new;
+
+  # Fetch the latest news about Mojolicious from Twitter
+  my $search = 'http://search.twitter.com/search.json?q=Mojolicious';
+  for $tweet (@{$ua->get($search)->res->json->{results}}) {
+
+    # Tweet text
+    my $text = $tweet->{text};
+
+    # Twitter user
+    my $user = $tweet->{from_user};
+
+    # Show both
+    my $result = "$text --$user";
+    utf8::encode $result;
+    say $result;
+  }
+
+Web::Magic:
+
+ my $search = web <http://search.twitter.com/search?q=Mojolicious>;
+ 
+ # Show tweets.
+ say "$_->{text} -- $_->{from_user}"
+   for @{ $search->{results} };
+
+Note that in the Web::Magic example, the URL doesn't include the ".json".
+Web::Magic B<knows> you want JSON because you tried to dereference C<$search>
+as a hashref, so it tells Twitter you want JSON (via the HTTP C<Accept>
+request header), and thus you get JSON automatically.
+
+We could have just as easily done:
+
+ my $search = web <http://search.twitter.com/search?q=Mojolicious>;
+ 
+ # Show tweets.
+ printf("%s -- %s\n", $_->title, $_->author)
+   for $search->entries;
+
+And you'd get Atom automatically. Or maybe you prefer RSS... the code is
+slightly more involved, but end result is the same:
+
+ my $search = web <http://search.twitter.com/search?q=Mojolicious>;
+ 
+ # Show tweets.
+ printf("%s -- %s\n", $_->title, $_->author)
+   for $search->assert_content_type('application/rss+xml')->entries;
+
+Twitter do supply an awful lot of formats, don't they?
+
+=head1 MORE EXAMPLES
+
+=head2 XML web services
+
+Get the temperature from Yahoo Weather.
+
+ my %opts = (
+   'w'  => 26191, # Yahoo "Where on Earth ID"
+   'u'  => 'c',   # Unit: 'c' or 'f'
+   );
+ 
+ my ($temperature) = Web::Magic
+   -> new(q<http://weather.yahooapis.com/forecastrss>, %opts)
+   -> findnodes('//yweather:condition/@temp')
+   -> map(sub { $_->value });
+ 
+ say "Temperature is $temperature";
+
+=head2 Find links
+
+Finds all links on Google's homepage.
+
+ web <http://www.google.co.uk/>
+   -> assert_success
+   -> assert_content_type('text/html')
+   -> make_absolute_urls
+   -> findnodes('~links')
+   -> foreach(sub {
+           printf "%s <%s>\n",
+             $_->{title} || $_->textContent,
+             $_->{href},
+      })
+   ;
+
+=head2 Semantic Web
+
+ use RDF::Trine qw/variable statement/;
+ 
+ my $foaf    = RDF::Trine::Namespace->new('http://xmlns.com/foaf/0.1/');
+ my $pattern = RDF::Trine::Pattern->new(
+     statement(variable('w'), $foaf->name, variable('x')),
+     statement(variable('w'), $foaf->homepage, variable('y')),
+     );
+ 
+ web <http://example.com/foaf.rdf>
+   -> get_pattern($pattern)
+   -> each(sub {
+           my $result = shift;
+           printf("%s has homepage %s.\n", $result->{x}, $result->{y});
+      })
+   ;
+
+=head2 Tapping
+
+Web::Magic provides a Ruby-inspired C<tap> method (see L<Object::Tap>).
+This enables coolness like:
+
+ web <http://www.perlmonks.org/>
+   -> assert_success
+   -> assert_content_type('text/html')
+   -> make_absolute_urls
+   -> tap(sub {
+           $_ -> findnodes('~links')
+              -> foreach(sub {
+                      printf "%s <%s>\n",
+                      $_->{title} || $_->textContent,
+                      $_->{href},
+                 })
+      })
+   -> tap(sub {
+           $_ -> findnodes('~images')
+              -> foreach(sub {
+                      printf "IMG: <%s>\n",
+                      $_->{src},
+                 })
+      })
+   ;
+
+Basically, the coderef passed to C<tap> is executed after assigning C<$_>
+to point to the Web::Magic object. Then the Web::Magic object itself is
+returned so that C<tap> can be chained.
+
+Arguably this takes chaining too far. ;-)
+
+=head2 POSTing data
+
+A cool thing about Web::Magic is that it will happily accept references,
+even blessed objects, as body data for HTTP POST, PUT, etc requests. How
+exactly that is serialized depends on what sort of reference you've
+given it, and what request Content-Type header you set.
+
+"application/x-www-form-urlencoded" (yes, that's a horrible name) is the
+most commonly used content type. It's the default for HTML form submissions.
+It's basically a bunch of key-value pairs, but unlike Perl hashes, keys
+may be repeated. You can submit this format using:
+
+  web <http://example.com/>
+    -> POST({ key1 => 'value1', key2 => 'value2' })
+    -> Content_Type('application/x-www-form-urlencoded');
+
+Though that's the default Content-Type, so you don't need to set it
+explicitly.
+
+  web <http://example.com/>
+    -> POST({ key1 => 'value1', key2 => 'value2' });
+
+You may pass an arrayref instead of a hashref. (This helps if you need to
+repeat a key.)
+
+  web <http://example.com/>
+    -> POST([ key1 => 'value1', key2 => 'value2' ]);
+
+Most web browsers do support another media type for POSTing data:
+"multipart/form-data". This has an advantage over
+"application/x-www-form-urlencoded" in that it allows file uploads.
+To use "multipart/form-data", you need to specify the Content-Type
+explicitly.
+
+  web <http://example.com/>
+    -> POST([ key1 => 'value1', key2 => 'value2' ])
+    -> Content_Type('multipart/form-data');
+
+As per "application/x-www-form-urlencoded", you may supply either a
+hashref or arrayref.
+
+Note how so far all values have been simple scalars; to upload a file,
+your value must be an arrayref. The first element of the array is
+required. It is the filename of the file to read data from. The second
+(optional) element of the array if the filename you want to provide to
+the server. Further elements are treated as key=>value pairs which set
+additional headers for the uploaded file. (Each uploaded file has its
+own set of headers.) The most useful header to set is Content-Type.
+
+  my @upload = ('/etc/motd', 'motd.txt', Content_Type => 'text/plain');
+  web <http://example.com/>
+    -> POST([ key1 => 'value1', key2 => \@upload ])
+    -> Content_Type('multipart/form-data');
+ 
+A future version of Web::Magic will hopefully add more flexibility, such
+as the ability to pass a file handle.
+
+While "application/x-www-form-urlencoded" and "multipart/form-data" are
+common, HTTP does allow arbitrary media types to be POSTed. Here's an
+example of POSTing "text/plain":
+
+  web <http://example.com/>
+    -> POST("Hello world!\n")
+    -> Content_Type('text/plain');
+
+Note that this is not the same as uploading a plain text file using
+"multipart/form-data". Only POST types other than the "big two" if you
+know that you're definitely supposed to.
+
+As per the "text/plain" example above, the general pattern is that you
+supply the HTTP body as a simple string. However, for certain content
+types, you can supply hashrefs, arrayrefs or blessed objects.
+
+=over
+
+=item * ARRAY: C<< application/json >> or C<< text/x-yaml >>.
+
+=item * HASH: C<< application/json >> or C<< text/x-yaml >>.
+
+=item * L<XML::LibXML::Node>: C<< application/xml >>, C<< text/xml >>, other XML media types, and C<< text/html >>.
+
+=item * L<RDF::Trine::Model>: C<< application/rdf+xml >>, C<< text/turtle >>, C<< text/plain >>, C<< text/x-nquads >>, C<< application/json >>.
+
+=back
+
+Here's a simple Atom Publishing Protocol example, taking the first entry
+from a local Atom feed, and POSTing it to an APP collection.
+
+  my $dom   = XML::LibXML->load_xml(location => 'file.atom');
+  my $entry = $dom->getElementsByTagName('entry')->get_node(1);
+  my $title = $entry->getElementsByTagName('title')->get_node(1);
+  web <http://example.com/app/>
+    -> POST($entry)
+    -> Content_Type('application/atom+xml; type=entry')
+    -> Slug($title->textContent);
+
+Of course, the C<POST> method is nothing special. All of this works with
+other HTTP methods too, such as C<PUT>. However for some HTTP methods
+such as C<GET> and C<HEAD> it is highly unusual (though permissible) to
+include a request body.
+
+=head1 SEE ALSO
+
+L<Web::Magic>.
+
+=head1 AUTHOR
+
+Toby Inkster E<lt>tobyink@cpan.orgE<gt>.
+
+=head1 COPYRIGHT AND LICENCE
+
+This document is copyright (c) 2012 by Toby Inkster.
+
+This is document is part of a free software project; you can redistribute
+it and/or modify it under the same terms as the Perl 5 programming language
+system itself.
+
+This document is additionally available under the Creative Commons
+Attribution-ShareAlike 2.0 UK: England & Wales (CC BY-SA 2.0) licence.
+
+=head1 DISCLAIMER OF WARRANTIES
+
+THIS DOCUMENT IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+

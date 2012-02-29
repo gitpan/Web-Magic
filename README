@@ -23,7 +23,13 @@ DESCRIPTION
         to 'GET'.
 
         The URI should be an HTTP or HTTPS URL. Other URI schemes may work
-        to varying degress of success.
+        to varying degress of success (e.g. "ftp://" supports GET, HEAD and
+        PUT requests, but bails on other methods; "mailto:" supports POST,
+        but bails on others). It may be given as a plain string, or an
+        object blessed into the URI or RDF::Trine::Node::Resource classes.
+        (Objects blessed into XML::Feed::Entry, XML::LibXML::Attr and
+        XML::LibXML::Element will often work too, though this is somewhat
+        obscure magic.)
 
         The %args hash is a convenience for constructing HTTP query strings.
         Hash values should be scalars, or at least overload stringification.
@@ -37,6 +43,14 @@ DESCRIPTION
         Note that %args always sets a URI query string, and does not set the
         request body, even in the case of the POST method. To set the
         request body, see the "set_request_body" method.
+
+        It is also possible to use the syntax:
+
+         Web::Magic->new($http_request_object);
+
+        Where $http_request_object is a HTTP::Request object. This uses not
+        only the URI of the HTTP::Request object, but also its method,
+        headers and body content.
 
     "new_from_data ($media_type, @data)"
         Allows you to instantiate a Web::Magic object from a string
@@ -151,6 +165,38 @@ DESCRIPTION
         A Web::Magic::Exception::BadPhase::Cancel exception will be thrown
         if the body can't be serialised, but not until the request is
         actually performed.
+
+        Attaching files to a form submission: to attach files, you need to
+        use a Content-Type of "multipart/form-data".
+
+          my $magic = W('http://example.ie/song-competition-entry-form')
+            ->POST
+            ->Content_Type('multipart/form-data')
+            ->set_request_body([
+                  title   => 'My Lovely Horse',
+                  singer  => 'Ted Krilly',
+                  attach  => ['dir/horse.mp3',
+                              'horse.mp3',
+                              Content_Type => 'audio/mp3',
+                              X_Encoding_Rate => '192 kbps',
+                             ],
+              ]);
+
+        Note that the key "attach" is not especially significant. It's
+        equivalent to the name attribute of an HTML file submission control:
+
+          <input type="file" name="attach">
+
+        What is significant is the use of an arrayref as attach's value. The
+        first element in the array specifies a filename to load the data
+        from (yes, a file handle might be nice, but it's not supported yet).
+        The second element is the file name that you'd like to inform the
+        server. Everything else is additional headers to submit with the
+        file. "Content-Type" is just about the only additional header worth
+        bothering with.
+
+    "set_auth($username, $password)"
+        Set username and password for HTTP Basic authentication.
 
     "set_user_agent($ua)"
         A variant of the "user_agent" method (see below), which returns the
@@ -284,8 +330,9 @@ DESCRIPTION
         If $xpath matches "/^[~]\w+$/" then, it is looked up in
         %Web::Magic::XPaths which is a hash of useful XPaths.
 
-         $magic->findnodes('~links')   # //a[@href], //link[@href], etc
-         $magic->findnodes('~images')  # //img[@src]
+         $magic->findnodes('~links')     # //a[@href], //link[@href], etc
+         $magic->findnodes('~images')    # //img[@src]
+         $magic->findnodes('~resources') # //img[@src], //video[@src], etc
 
         Future versions of Web::Magic should add more.
 
@@ -340,7 +387,7 @@ DESCRIPTION
 
          my $link = do { ... some code that selects an element ... };
          my $abs  = URI->new_abs(
-           $link->getAttribute('href'),
+           $link->getAttribute('href'),  # or in XML::LibXML 1.91+: $link->{href}
            ($link->baseURI // $link->ownerDocument->URI),
            );
 
@@ -567,8 +614,11 @@ DESCRIPTION
         assertions made. (In fact, returns the number of such assertions.)
 
     "user_agent"
-        Get/set the LWP::UserAgent that will be used (or has been used) to
-        issue the request.
+        This method can be called as an object method or a class method,
+        with slightly different semantics for each.
+
+        Object method: Get/set the LWP::UserAgent that will be used (or has
+        been used) to issue this request.
 
           $magic->user_agent($ua);      # set
           my $ua = $magic->user_agent;  # get
@@ -589,30 +639,32 @@ DESCRIPTION
           $magic->user_agent->from('tobyink@cpan.org');
           $magic->user_agent->max_redirect(3);
 
-        Usually a new user agent is instantiated for each request. It is
-        possible to set a global user agent to use as the default UA for all
-        future requests:
+        Class method: In usual Web::Magic usage, a new user agent is
+        instantiated for each request. However, it is possible to create a
+        global user agent to use as the default UA for all future requests.
 
           Web::Magic->user_agent( LWP::UserAgent->new(...) );
 
         This may be useful for caching, retaining cookies between requests,
         etc. When a global user agent is defined, it is still possible to
-        set user_agent on individual user_agent instances. You can clear the
-        global user agent using
+        set user_agent on individual user_agent instances, using the
+        "user_agent" *object method*. You can clear the global user agent
+        using:
 
           Web::Magic->user_agent( undef );
 
-        As an alternative way of accessing the global user agent, you can
-        use the package variable.
+        Throws a Web::Magic::Exception if called as a setter and passed a
+        defined but non-LWP::UserAgent value. (Unlike the object method, the
+        class method does not accept a plain hashref.)
+
+        Package variable: As an alternative way of accessing the global user
+        agent, you can use the package variable.
 
           $Web::Magic::user_agent = LWP::UserAgent->new(...);
 
         This has the advantage that changes can be localised using Perl's
         "local" keyword, but it skips validation logic in the getter/setter
         so needs to be used with caution.
-
-        Throws a Web::Magic::Exception if called as a setter and passed a
-        defined but non-LWP::UserAgent value.
 
     "acme_24"
         Returns the string 'Acme::24'.
@@ -633,6 +685,9 @@ DESCRIPTION
         evaluate to false:
 
           W('http://example.com/')->can('random_jackbauer_fact')
+
+  Constants
+    *   "NAMESPACE_XHTML" = 'http://www.w3.org/1999/xhtml'
 
   Private Methods
     The following methods should not normally be used, but may be useful for
@@ -656,7 +711,9 @@ DESCRIPTION
         Returns the HTTP::Request object that will be used to issue the
         request. Sets %default_headers as HTTP request headers only if they
         are not already set. Serialises the request body from
-        "$self->_stash->{request_body}".
+        "$self->_stash->{request_body}". Once this method has been called,
+        it is assumed that no further changes will be made to the request
+        object.
 
     *   "_check_assertions($reponse, @assertions)"
 
@@ -670,6 +727,11 @@ DESCRIPTION
         implementation which performs HTTP requests in a background thread,
         you can use this callback to tidy up HTTP connections prior to the
         exception being thrown.
+
+    *   "_blessed_thing_to_uri($thing)"
+
+        Class method called by Web::Magic's constructor to convert a blessed
+        object to a URI string.
 
   Exceptions
     Web::Magic's exceptions are subclasses of Exception::Class::Base - the
@@ -737,7 +799,7 @@ NOTES
         ->GET
         ->make_absolute_urls
         ->querySelectorAll('a[rel="stylesheet"]')
-        ->foreach(sub{ say $_->getAttribute('href') })
+        ->foreach(sub{ say $_->{href} })
 
     But there is actually a logic to it.
 
@@ -784,6 +846,17 @@ NOTES
     HTTP requests, and WWW::Mechanize is a subclass of LWP::UserAgent:
 
      local $Web::Magic::user_agent = WWW::Mechanize->new(...);
+
+TODO
+    *   Make non HTTP Basic authentication easier.
+
+        For example, HTTP Digest auth, WebID. OAuth might be within this
+        scope, but probably not.
+
+    *   Integration with HTML::HTML5::DOM.
+
+        H:H5:DOM isn't released yet, but once it is, it should enable some
+        pretty awesome stuff.
 
 BUGS
     Inumerable, almost certainly.

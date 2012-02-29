@@ -5,6 +5,16 @@ Created:      2011-11-28
 Home page:    <https://metacpan.org/release/Web-Magic>
 Bug tracker:  <http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic>
 
+0.008  2012-02-29
+
+ - (Addition Documentation) Web::Magic::Examples.
+ - Add '~resources' shortcut to findnodes.
+ - Allow various blessed objects to be passed to the constructor instead of
+   a string URI.
+ - Support XML::LibXML::Node objects as request bodies.
+   (XML::LibXML::Document was already supported.)
+ - Support multipart/form-data.
+
 0.007  2012-01-26  # Happy Australia Day!
 
  - $Web::Magic::user_agent is the default user agent.
@@ -17,10 +27,11 @@ Bug tracker:  <http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic>
  - (Addition) save_as method
  - (Addition) set_user_agent method
  - (Addition) tap method
+ - Make findnodes (the XML one) cooler.
  - Make user_agent into a setter (not just a getter).
  - When parsing response body as a DOM, call $document->setURI to set the
    document URI.
- - rename findNodes method to json_findnodes, and document it
+ - rename findNodes method to json_findnodes, and document it.
 
 0.006  2012-01-12
 

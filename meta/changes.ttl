@@ -99,10 +99,26 @@ dist:v_0-007
 		dcs:item   [ rdfs:label "%Web::Magic::XPaths"@en ; a dcs:Addition ] ;
 		dcs:item   [ rdfs:label "set_user_agent method"@en ; a dcs:Addition ] ;
 		dcs:item   [ rdfs:label "save_as method"@en ; a dcs:Addition ] ;
-		dcs:item   [ rdfs:label "rename findNodes method to json_findnodes, and document it"@en ] ;
+		dcs:item   [ rdfs:label "rename findNodes method to json_findnodes, and document it."@en ] ;
 		dcs:item   [ rdfs:label "new_from_data constructor"@en ; a dcs:Addition ] ;
+		dcs:item   [ rdfs:label "Make findnodes (the XML one) cooler."@en ] ;
 		dcs:item   [ rdfs:label "Added NOTES section."@en ; a dcs:Addition, dcs:Documentation ] ;
 		dcs:item   [ rdfs:label "Make user_agent into a setter (not just a getter)."@en ] ;
 		dcs:item   [ rdfs:label "$Web::Magic::user_agent is the default user agent."@en ] ;
+		] .
+
+dist:project :release dist:v_0-008 .
+dist:v_0-008
+	a               :Version ;
+	dc:issued       "2012-02-29"^^xsd:date ;
+	:revision       "0.008"^^xsd:string ;
+	:file-release   <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Web-Magic-0.008.tar.gz> ;
+	dcs:changeset [
+		dcs:versus dist:v_0-007;
+		dcs:item   [ rdfs:label "Allow various blessed objects to be passed to the constructor instead of a string URI."@en ];
+		dcs:item   [ rdfs:label "Support multipart/form-data."@en ];
+		dcs:item   [ rdfs:label "Support XML::LibXML::Node objects as request bodies. (XML::LibXML::Document was already supported.)"@en ];
+		dcs:item   [ rdfs:label "Web::Magic::Examples."@en ; a dcs:Documentation, dcs:Addition ];
+		dcs:item   [ rdfs:label "Add '~resources' shortcut to findnodes."@en ]
 		] .
 

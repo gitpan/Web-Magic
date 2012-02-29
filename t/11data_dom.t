@@ -2,8 +2,12 @@ use strict;
 use lib "lib";
 use lib "t/lib";
 
+use XML::LibXML;
 use Web::Magic -sub => 'W';
 use TestHttpServer;
+
+plan skip_all => "this test is broken in XML::LibXML 1.91/1.92"
+	if XML::LibXML->VERSION =~ m{^1\.9[12]$};
 
 plan tests => 8;
 

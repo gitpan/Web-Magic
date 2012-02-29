@@ -13,7 +13,7 @@
 		"Test::Exception 0",
 		"Test::More 0.61";
 	:recommends
-		"XML::LibXML 1.91";
+		"XML::LibXML 1.93";
 	:requires
 		"common::sense",
 		"namespace::sweep",
@@ -30,9 +30,9 @@
 		"JSON::JOM::Plugins::JsonPath 0",
 		"LWP::UserAgent 0",
 		"Object::AUTHORITY 0",
-		"Object::DOES 0",
 		"Object::Stash 0.001",
 		"Object::Tap 0",
+		"PerlX::Perform 0",
 		"PerlX::QuoteOperator 0.04",
 		"RDF::RDFa::Parser 1.096",
 		"RDF::Trine 0.135",

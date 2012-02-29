@@ -4,19 +4,20 @@ use 5.010;
 use common::sense;
 use namespace::sweep; # namespace::autoclean breaks overloading
 use Object::AUTHORITY;
-use Object::DOES;
 use Object::Stash qw/_stash/;
 use Object::Tap;
+use PerlX::Perform;
 use utf8;
 
 BEGIN {
 	$Web::Magic::AUTHORITY = 'cpan:TOBYINK';
-	$Web::Magic::VERSION   = '0.007';
+	$Web::Magic::VERSION   = '0.008';
 }
 
 use HTTP::Date 0                   qw//;
 use HTTP::Response 0               qw//;
 use HTTP::Request 0                qw//;
+use HTTP::Request::Common 5.0      qw//;
 use JSON::JOM 0.501                qw/to_jom from_json to_json/;
 use JSON::JOM::Plugins::Dumper 0   qw//;
 use JSON::JOM::Plugins::JsonPath 0 qw//;
@@ -33,6 +34,10 @@ use overload
 	'@{}'  => \&to_hashref,
 	'""'   => \&content,
 	;
+
+use constant {
+	NAMESPACE_XHTML   => 'http://www.w3.org/1999/xhtml',
+	};
 
 our %Exceptions;
 BEGIN
@@ -136,9 +141,11 @@ BEGIN {
 
 our %XPaths;
 BEGIN {
+	my $thingsWithSrc = '(local-name()="img" or local-name()="video" or local-name()="audio" or local-name()="source" or local-name()="script") and @src';
 	%XPaths = (
-		'~links'  => '//*[(local-name()="a" or local-name()="area" or local-name()="link") and @href]',
-		'~images' => '//*[local-name()="img" and @src]',
+		'~links'     => '//*[(local-name()="a" or local-name()="area" or local-name()="link") and @href]',
+		'~images'    => '//*[local-name()="img" and @src]',
+		'~resources' => "//*[($thingsWithSrc) or (local-name()=\"object\" and \@data)]",
 		);
 }
 
@@ -191,14 +198,21 @@ sub new
 {
 	my $class  = shift;
 	
-	my $method = 'GET';
+	my $method = undef;
 	if ($_[0] =~ /^[A-Z][A-Z0-9]{0,19}$/)
 	{
 		$method = shift;
 	}
+
+	if (blessed $_[0] and $_[0]->isa('HTTP::Request'))
+	{
+		return $class->_http_request_to_uri($method, $_[0]);
+	}
+
+	unshift @_, $class->_blessed_thing_to_uri(shift);
 	
-	my ($u, %args) = map {"$_"} @_;
-	$u =~ s{(^\s*)|(\*$)}{}g;
+	my ($u, %args) = map {"$_"} @_; # stringify
+	$u =~ s{(^\s*)|(\*$)}{}g;       # trim whitespace
 	
 	if (%args)
 	{
@@ -208,7 +222,7 @@ sub new
 	}
 	
 	my $self = bless \$u, $class;
-	$self->set_request_method($method);
+	$self->set_request_method($method // 'GET');
 	return $self;
 }
 
@@ -225,6 +239,77 @@ sub new_from_data
 	$uri->media_type($media_type);
 	$uri->data(join '', @data);
 	$class->new(GET => $uri)->do_request;
+}
+
+sub _http_request_to_uri
+{
+	my ($class, $explicit_method, $request) = @_;
+	
+	Web::Magic::Exception->throw("Given explicit HTTP method which contradicts method in HTTP::Request object\n")
+		if defined $explicit_method && $request->method ne $explicit_method;
+		
+	my $self = $class->new(uc($request->method), $request->uri);	
+	perform { $self->set_request_body($_) } wherever $request->content;
+	
+	foreach my $h ($request->header_field_names)
+	{
+		$self->set_request_header($h, $request->header($h));
+	}
+	
+	return $self;
+}
+
+sub _blessed_thing_to_uri
+{
+	my ($class, $u) = @_;
+	
+	if (blessed $u and $u->isa('XML::LibXML::Attr')
+	    and $u->parentNode->namespaceURI eq NAMESPACE_XHTML)
+	{
+		if ($u->nodeName ~~ [qw/href src cite/]
+		or  $u->nodeName ~~ 'data'     && $u->parentNode->nodeName ~~ 'object'
+		or  $u->nodeName ~~ 'action'   && $u->parentNode->nodeName ~~ 'form'
+		or  $u->nodeName ~~ 'ping'     && $u->parentNode->nodeName ~~ 'a'
+		or  $u->nodeName ~~ 'longdesc' && $u->parentNode->nodeName ~~ 'img'
+		or  $u->nodeName ~~ 'lowsrc'   && $u->parentNode->nodeName ~~ 'img'
+		or  $u->nodeName ~~ 'poster'   && $u->parentNode->nodeName ~~ 'video')
+		{
+			my $base = $u->parentNode->baseURI // $u->ownerDocument->URI;
+			$u = URI->new_abs($u->getValue, $base);
+		}
+	}
+
+	elsif (blessed $u and $u->isa('XML::LibXML::Element')
+	       and $u->namespaceURI eq NAMESPACE_XHTML)
+	{
+		my $x = do {
+			if    ($u->hasAttribute('href'))   { $u->getAttribute('href') }
+			elsif ($u->hasAttribute('src'))    { $u->getAttribute('src') }
+			elsif ($u->hasAttribute('cite'))   { $u->getAttribute('cite') }
+			elsif ($u->hasAttribute('data')
+			  and  $u->nodeName eq 'object')   { $u->getAttribute('data') }
+			elsif ($u->hasAttribute('action')
+			  and  $u->nodeName eq 'form')     { $u->getAttribute('action') }
+			else                               { [] }
+			};
+		unless (ref $x eq 'ARRAY')
+		{
+			my $base = $u->baseURI // $u->ownerDocument->URI;
+			$u = URI->new_abs($x, $base);
+		}
+	}
+
+	elsif (blessed $u and $u->isa('RDF::Trine::Node::Resource'))
+	{
+		$u = $u->uri;
+	}
+	
+	elsif (blessed $u and $u->isa('XML::Feed::Entry'))
+	{
+		$u = $u->link;
+	}
+	
+	return $u;
 }
 
 sub __autoload
@@ -356,6 +441,22 @@ sub set_request_header
 	}
 
 	$self->_request_object->header($h => $v);
+	return $self;
+}
+
+sub set_auth
+{
+	my ($self, $u, $p) = @_;
+
+	if ($self->is_requested)
+	{
+		Web::Magic::Exception::BadPhase->throw(
+			message =>
+				"Cannot set authorization on already requested resource\n",
+			);
+	}
+
+	$self->_request_object->authorization_basic($u, $p);
 	return $self;
 }
 
@@ -503,7 +604,7 @@ sub _final_request_object
 				$success++;
 			}
 		}
-		elsif (blessed $body and $body->isa('XML::LibXML::Document'))
+		elsif (blessed $body and $body->isa('XML::LibXML::Node'))
 		{
 			$self->__deferred_load('XML::LibXML' => '1.70');
 			
@@ -511,8 +612,16 @@ sub _final_request_object
 			
 			given ( $req_ct // 'xml' )
 			{
-				when (/xml/)     { $ser = $body->toString }
-				when (/html/)    { $ser = HTML::HTML5::Writer->new->document($body) }
+				when (/html/ and $body->isa('XML::LibXML::Document'))
+					{ $ser = HTML::HTML5::Writer->new->document($body) }
+				when (/html/ and $body->isa('XML::LibXML::Element'))
+					{ $ser = HTML::HTML5::Writer->new->element($body) }
+				when (/html/ and $body->isa('XML::LibXML::Comment'))
+					{ $ser = HTML::HTML5::Writer->new->comment($body) }
+				when (/html/ and $body->isa('XML::LibXML::Attr'))
+					{ $ser = HTML::HTML5::Writer->new->attribute($body) }
+				default
+					{ $ser = $body->toString }
 			}
 			
 			if ($ser)
@@ -532,13 +641,20 @@ sub _final_request_object
 			$req->content(Dump $body);
 			$success++;
 		}
-		elsif (ref $body eq 'HASH' and ($req_ct//'urlencoded') =~ /urlencoded/i)
+		elsif (ref $body ~~ [qw/HASH ARRAY/] and ($req_ct//'urlencoded') =~ /urlencoded/i)
 		{
-			my $axwwfue = join '&',
-				map { sprintf('%s=%s', uri_escape($_), uri_escape($body->{$_})) }
-				keys %$body;
-			$req->content($axwwfue);
+			$req->content(_ref_to_axwwfue($body));
 			$req->content_type('application/x-www-form-urlencoded') unless $req_ct;
+			$success++;
+		}
+		elsif (ref $body ~~ [qw/HASH ARRAY/] and ($req_ct//'form-data') =~ /form-data/i)
+		{
+			my $R = HTTP::Request::Common::POST(
+				$$self, Content => $body, Content_Type => ($req_ct//'form-data'),
+				);
+			$req->content($R->content);
+			# don't use ->content_type because we need "boundary" parameter
+			$req->content_type($R->header('Content-Type'));
 			$success++;
 		}
 		else
@@ -552,6 +668,40 @@ sub _final_request_object
 	}
 	
 	return $req;
+}
+
+sub _hash_to_array
+{
+	my %hash  = ref $_[0] ? %{+shift} : @_;
+	my @array = ();
+	foreach my $k (keys %hash)
+	{
+		push @array, $k, $hash{$k};
+	}
+	return \@array;
+}
+
+sub _array_to_axwwfue
+{
+	my @array = ref $_[0] ? @{+shift} : @_;
+	my @return;
+	while (@array)
+	{
+		push @return, sprintf(
+			'%s=%s',
+			uri_escape(shift @array),
+			uri_escape(shift @array),
+			);
+	}
+	return join '&', @return;
+}
+
+sub _ref_to_axwwfue
+{
+	my $ref = shift;
+	return _array_to_axwwfue(
+		(ref $ref eq 'ARRAY') ? $ref : _hash_to_array($ref)
+		);
 }
 
 sub is_requested
@@ -704,7 +854,7 @@ sub json_findnodes
 
 sub to_dom
 {
-	my ($self) = @_;
+	my ($self, $upgrade) = @_;
 	my $stash = $self->_stash;
 
 	$self->__deferred_load(
@@ -740,6 +890,15 @@ sub to_dom
 		}
 		
 		$stash->{dom}->setURI( $self->response->base // $$self );
+	}
+	
+	if ($upgrade)
+	{
+		Web::Magic::Exception::BadReponseType->throw(
+			message => "Need to upgrade DOM, but XML::LibXML::Augment not loaded\n",
+			) unless UNIVERSAL::can('XML::LibXML::Augment', 'can')
+			      && XML::LibXML::Augment->can('rebless');
+		XML::LibXML::Augment->rebless($stash->{dom});
 	}
 	
 	return $stash->{dom};
@@ -951,7 +1110,7 @@ sub make_absolute_urls
 	unless ($xpc)
 	{
 		$xpc = XML::LibXML::XPathContext->new;
-		$xpc->registerNs(xhtml => 'http://www.w3.org/1999/xhtml')
+		$xpc->registerNs(xhtml => NAMESPACE_XHTML)
 			if $self->header('Content-Type') =~ /html/i;
 	}
 	
@@ -1002,7 +1161,7 @@ sub opengraph
 	$return;
 }
 
-'Just DWIM!';
+'Just DWIM!'
 
 __END__
 
@@ -1038,7 +1197,12 @@ avoid it being interpreted by the constructor as a URI. It defaults to
 'GET'.
 
 The URI should be an HTTP or HTTPS URL. Other URI schemes may work
-to varying degress of success.
+to varying degress of success (e.g. "ftp://" supports GET, HEAD and PUT
+requests, but bails on other methods; "mailto:" supports POST, but bails
+on others). It may be given as a plain string, or an object blessed into
+the L<URI> or L<RDF::Trine::Node::Resource> classes. (Objects blessed
+into L<XML::Feed::Entry>, L<XML::LibXML::Attr> and L<XML::LibXML::Element>
+will often work too, though this is somewhat obscure magic.)
 
 The C<< %args >> hash is a convenience for constructing HTTP query
 strings. Hash values should be scalars, or at least overload
@@ -1052,6 +1216,14 @@ stringification. The following are all equivalent...
 Note that C<< %args >> always sets a URI query string, and does B<not>
 set the request body, B<even in the case of the POST method>. To set
 the request body, see the C<set_request_body> method.
+
+It is also possible to use the syntax:
+
+ Web::Magic->new($http_request_object);
+
+Where C<$http_request_object> is a L<HTTP::Request> object. This uses
+not only the URI of the HTTP::Request object, but also its method,
+headers and body content.
 
 =item C<< new_from_data ($media_type, @data) >>
 
@@ -1170,6 +1342,38 @@ if called on a Web::Magic object that has already been requested.
 
 A Web::Magic::Exception::BadPhase::Cancel exception will be thrown if the
 body can't be serialised, but not until the request is actually performed.
+
+B<Attaching files to a form submission:> to attach files, you need to
+use a Content-Type of "multipart/form-data".
+
+  my $magic = W('http://example.ie/song-competition-entry-form')
+    ->POST
+    ->Content_Type('multipart/form-data')
+    ->set_request_body([
+          title   => 'My Lovely Horse',
+          singer  => 'Ted Krilly',
+          attach  => ['dir/horse.mp3',
+                      'horse.mp3',
+                      Content_Type => 'audio/mp3',
+                      X_Encoding_Rate => '192 kbps',
+                     ],
+      ]);
+
+Note that the key "attach" is not especially significant. It's equivalent
+to the name attribute of an HTML file submission control:
+
+  <input type="file" name="attach">
+
+What is significant is the use of an arrayref as attach's value. The first
+element in the array specifies a filename to load the data from (yes, a
+file handle might be nice, but it's not supported yet). The second element
+is the file name that you'd like to inform the server. Everything else is
+additional headers to submit with the file. "Content-Type" is just about
+the only additional header worth bothering with.
+
+=item C<< set_auth($username, $password) >>
+
+Set username and password for HTTP Basic authentication.
 
 =item C<< set_user_agent($ua) >>
 
@@ -1319,8 +1523,9 @@ a DOM.
 If C<< $xpath >> matches C<< /^[~]\w+$/ >> then, it is looked up in
 C<< %Web::Magic::XPaths >> which is a hash of useful XPaths.
 
- $magic->findnodes('~links')   # //a[@href], //link[@href], etc
- $magic->findnodes('~images')  # //img[@src]
+ $magic->findnodes('~links')     # //a[@href], //link[@href], etc
+ $magic->findnodes('~images')    # //img[@src]
+ $magic->findnodes('~resources') # //img[@src], //video[@src], etc
 
 Future versions of Web::Magic should add more.
 
@@ -1374,7 +1579,7 @@ the URLs you need and make them absolute like this:
 
  my $link = do { ... some code that selects an element ... };
  my $abs  = URI->new_abs(
-   $link->getAttribute('href'),
+   $link->getAttribute('href'),  # or in XML::LibXML 1.91+: $link->{href}
    ($link->baseURI // $link->ownerDocument->URI),
    );
 
@@ -1630,8 +1835,11 @@ assertions made. (In fact, returns the number of such assertions.)
 
 =item C<< user_agent >>
 
-Get/set the L<LWP::UserAgent> that will be used (or has been used)
-to issue the request.
+This method can be called as an object method or a class method, with
+slightly different semantics for each.
+
+B<Object method:> Get/set the L<LWP::UserAgent> that will be used (or has
+been used) to issue this request.
 
   $magic->user_agent($ua);      # set
   my $ua = $magic->user_agent;  # get
@@ -1651,28 +1859,31 @@ existing user agent but use the hashref to set attributes for it.
   $magic->user_agent->from('tobyink@cpan.org');
   $magic->user_agent->max_redirect(3);
 
-Usually a new user agent is instantiated for each request. It is possible to
-set a global user agent to use as the default UA for all future requests:
+B<Class method:>  In usual Web::Magic usage, a new user agent is
+instantiated for each request. However, it is possible to create a global
+user agent to use as the default UA for all future requests.
 
   Web::Magic->user_agent( LWP::UserAgent->new(...) );
 
 This may be useful for caching, retaining cookies between requests, etc. When
 a global user agent is defined, it is still possible to set user_agent on 
-individual user_agent instances. You can clear the global user agent using
+individual user_agent instances, using the C<user_agent> I<object method>.
+You can clear the global user agent using:
 
   Web::Magic->user_agent( undef );
 
-As an alternative way of accessing the global user agent, you can use the
-package variable.
+Throws a Web::Magic::Exception if called as a setter and passed a defined
+but non-LWP::UserAgent value. (Unlike the object method, the class method
+does not accept a plain hashref.)
+
+B<Package variable:> As an alternative way of accessing the global user agent,
+you can use the package variable.
 
   $Web::Magic::user_agent = LWP::UserAgent->new(...);
 
 This has the advantage that changes can be localised using Perl's C<local>
 keyword, but it skips validation logic in the getter/setter so needs to be
 used with caution.
-
-Throws a Web::Magic::Exception if called as a setter and passed a defined but
-non-LWP::UserAgent value.
 
 =item C<< acme_24 >>
 
@@ -1701,6 +1912,14 @@ to evaluate to false:
 
 =back
 
+=head2 Constants
+
+=over
+
+=item * C<< NAMESPACE_XHTML >> = 'http://www.w3.org/1999/xhtml'
+
+=back
+
 =head2 Private Methods
 
 The following methods should not normally be used, but may be useful
@@ -1725,7 +1944,8 @@ The (mutable) HTTP::Request object that can/will be used to issue the request.
 Returns the HTTP::Request object that will be used to issue the request.
 Sets C<< %default_headers >> as HTTP request headers only if they are not
 already set. Serialises the request body from
-C<< $self->_stash->{request_body} >>.
+C<< $self->_stash->{request_body} >>. Once this method has been called,
+it is assumed that no further changes will be made to the request object.
 
 =item * C<< _check_assertions($reponse, @assertions) >>
 
@@ -1738,6 +1958,11 @@ A no-op in this implementation. This method is sometimes called just prior
 to an exception being thrown. Thus, in an asynchronous implementation which
 performs HTTP requests in a background thread, you can use this callback
 to tidy up HTTP connections prior to the exception being thrown.
+
+=item * C<< _blessed_thing_to_uri($thing) >>
+
+Class method called by Web::Magic's constructor to convert a blessed
+object to a URI string.
 
 =back
 
@@ -1824,7 +2049,7 @@ At first glance, Web::Magic seems a little chaotic...
     ->GET
     ->make_absolute_urls
     ->querySelectorAll('a[rel="stylesheet"]')
-    ->foreach(sub{ say $_->getAttribute('href') })
+    ->foreach(sub{ say $_->{href} })
 
 But there is actually a logic to it.
 
@@ -1874,6 +2099,22 @@ allows you to set a custom user agent for HTTP requests, and WWW::Mechanize
 is a subclass of LWP::UserAgent:
 
  local $Web::Magic::user_agent = WWW::Mechanize->new(...);
+
+=head1 TODO
+
+=over
+
+=item * Make non HTTP Basic authentication easier.
+
+For example, HTTP Digest auth, WebID. OAuth might be within this scope,
+but probably not.
+
+=item * Integration with HTML::HTML5::DOM.
+
+H:H5:DOM isn't released yet, but once it is, it should enable some
+pretty awesome stuff.
+
+=back
 
 =head1 BUGS
 

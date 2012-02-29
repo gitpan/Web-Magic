@@ -14,19 +14,21 @@ not run its Makefile.PL or Build.PL.
 -----BEGIN PGP SIGNED MESSAGE-----
 Hash: SHA1
 
-SHA1 38b11813bb9126ea944ded170a3d69356f3d9586 Changes
+SHA1 f7bcf7f998ef72870f5718c2b80650894f43a3d1 Changes
 SHA1 1d54db0b8134eb1c8ea0cee400f9dc612bcaa61a LICENSE
-SHA1 9051f09272c9061fb70f8c7611175cd79a7a61c5 MANIFEST
-SHA1 fac485144e4b96b95632750e76c40e9e882f8e44 META.yml
+SHA1 ef335fcadeaece93cc1aad7dc15c418aa2828326 MANIFEST
+SHA1 4ae43fa1d84f84d3dd7806a86b98ded98f291029 META.yml
 SHA1 80519f46cf4d005b59c73d680d3f90aef176d9bd Makefile.PL
-SHA1 bf898a4fc4515f24f46a782216a267caa364373d README
+SHA1 b6f939aedba2deebb47a6c29c01cb5fc1be1ee29 README
 SHA1 81d7fb60a0acf519fefddabb2b203bdc02e60496 examples/absolutize.pl
 SHA1 ab55fa240bb84e021ba09bde5e4dbd9718537e06 examples/absolutize2.pl
 SHA1 769575bddad1894cf0a452c926cb768a080b34f1 examples/assert-async.pl
 SHA1 8c6b55be295789bf8272ff2ac1910d45cb076b68 examples/assert.pl
+SHA1 13358b63bfe650dfb14c81dca8dc0934528042e6 examples/form-data.pl
 SHA1 87fb0687e7d57ed244659090a488b3ed4cf9ddc1 examples/opengraph.pl
 SHA1 e2620799238b92cb154de81d6e3547acc5e45eb1 examples/quote-like.pl
 SHA1 fffc86fb66a75b2e30f58b121fae21302cc00f7f examples/stuff.pl
+SHA1 4b144ff9eef9ff5579174a5dfc188e6df7e22adb examples/tap.pl
 SHA1 5d94bc10deff1dd74e4bc5dfa6fc015e39271f15 inc/Module/AutoInstall.pm
 SHA1 40106479d4e07f379cb82ca1d69fca92e3a40f47 inc/Module/Install.pm
 SHA1 34a24a530ecf0365cc02e4150b06c9bed702a441 inc/Module/Install/AutoInstall.pm
@@ -43,22 +45,24 @@ SHA1 1326052d1df1065debee74f9d8583a734b9b3d00 inc/Module/Install/Win32.pm
 SHA1 bb607f3715c40fc3bc1c46496587cdb215bc4fa2 inc/Module/Install/WriteAll.pm
 SHA1 26d58a041cd6b3d21db98b32e8fd1841aae21204 inc/Module/Package.pm
 SHA1 6b807287940754cc31a3db59f2b22e363d5525be inc/Module/Package/Dist/RDF.pm
-SHA1 775bd24f2fdbb6dce51a8b5b0cdb01fccfce83c4 inc/Scalar/Util.pm
-SHA1 b1b664983568bf822c327599eb88e223483ae96a inc/Scalar/Util/PP.pm
+SHA1 e31c281782183601e1e057c5914f63269e043932 inc/Scalar/Util.pm
+SHA1 5eae2f71c45a996a296d2445b18d0589307111f0 inc/Scalar/Util/PP.pm
 SHA1 eef6bff62046bff2ce08ba132d0b58fba30f40b4 inc/YAML/Tiny.pm
-SHA1 2bc67ada5b87a1cecd4adc1595defdd1650daca2 lib/Web/Magic.pm
-SHA1 84d404ce91a35e15f3355c37605cf7a610e8c2e6 lib/Web/Magic/Async.pm
-SHA1 b42866fb99a1b8454a088e0e792c567602a2978a lib/Web/Magic/Util.pm
-SHA1 5a02b18873d5e4b639a4da4e0cd79af48b2b70d5 meta/changes.ttl
+SHA1 7b8ee9a10b5926405230400fa2e8771b05a23d29 lib/Web/Magic.pm
+SHA1 9260e367cc79a369acaf540028755766b5ec2c93 lib/Web/Magic/Async.pm
+SHA1 49d35545a2573ebfad2cf281fdea266095eaf823 lib/Web/Magic/Examples.pod
+SHA1 ed92d19c30b4f1a1a221bd300733874f463fbbc7 lib/Web/Magic/Util.pm
+SHA1 a7af19fc4447fa503464e44e77524c98b040ab81 meta/changes.ttl
 SHA1 61d5ba4e60fc0a075f79d4cce4513e1f8fef5d73 meta/doap.ttl
-SHA1 a7019630761c64480657d42830bbe5f4ba7babb4 meta/makefile.ttl
+SHA1 fa22f07dd1ad4b227f6abc9e8c866952ea07aa99 meta/makefile.ttl
 SHA1 2906cae4fc3538ff6be648a2c51366aa7f73f478 t/01basic.t
 SHA1 3cc0daef70ca48ead41a304bb675e8f297d6e4c7 t/02http.t
 SHA1 57ffab71cbe01c75ebaff455809a126288e4f9e3 t/03ua.t
 SHA1 1874454610518cc6ab7111c057d0fe69b8998e91 t/04datauri.t
 SHA1 8fa99c6d902fc5a1c94098c961272879c5b11667 t/05saveas.t
+SHA1 0655f394cf0d726fb4ebeeca5670e8c91f29c1de t/06httpreq.t
 SHA1 b1bc2bc2315cd45a09a36bce13f11a5991160368 t/10data_tree.t
-SHA1 50347a67273e816960076130bd4d9ae2f53c6e6a t/11data_dom.t
+SHA1 0cff78510a06f8d2433cdb6a50c4ff5a79bcf639 t/11data_dom.t
 SHA1 cf0b320e3dd2a276191c68ea809b853c9a2c9f87 t/12data_rdf.t
 SHA1 c145c4023e4f8a015b0110476aedd8deccac81e2 t/lib/Test/HTTP/Server.pm
 SHA1 aa2db235f0fffda64cc1508e844e8fad1184fe7d t/lib/TestHttpServer.pm
@@ -66,7 +70,7 @@ SHA1 16f90a2a45ff02d92220c977067a55333fe24de7 t/run-test-server.pl
 -----BEGIN PGP SIGNATURE-----
 Version: GnuPG v1.4.10 (GNU/Linux)
 
-iEYEARECAAYFAk8hWqUACgkQzr+BKGoqfTmzWwCgkKJnpyUx/qr7DafPNhJ9RLMc
-4xoAoKcAIhfnlUdU98Bvlp3AXL1bCb1g
-=3xpQ
+iEYEARECAAYFAk9Or8oACgkQzr+BKGoqfTmdcgCfZQrNWYJN6Idq/cmreOt/mAR2
+o0UAoKu/7dC1AsdsL1mo1QpjY+uq3p20
+=rUhq
 -----END PGP SIGNATURE-----

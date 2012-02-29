@@ -24,7 +24,7 @@ no_index:
     - t
     - xt
 recommends:
-  XML::LibXML: 1.91
+  XML::LibXML: 1.93
 requires:
   Acme::24: 0.03
   AnyEvent::HTTP: 2.13
@@ -33,15 +33,16 @@ requires:
   HTML::HTML5::Writer: 0.100
   HTTP::Date: 0
   HTTP::Request: 0
+  HTTP::Request::Common: 5.0
   HTTP::Response: 0
   JSON::JOM: 0.501
   JSON::JOM::Plugins::Dumper: 0
   JSON::JOM::Plugins::JsonPath: 0
   LWP::UserAgent: 0
   Object::AUTHORITY: 0
-  Object::DOES: 0
   Object::Stash: 0.001
   Object::Tap: 0
+  PerlX::Perform: 0
   PerlX::QuoteOperator: 0.04
   RDF::RDFa::Parser: 1.096
   RDF::Trine: 0.135
@@ -61,4 +62,4 @@ resources:
   bugtracker: http://rt.cpan.org/Dist/Display.html?Queue=Web-Magic
   homepage: https://metacpan.org/release/Web-Magic
   license: http://dev.perl.org/licenses/
-version: 0.007
+version: 0.008
