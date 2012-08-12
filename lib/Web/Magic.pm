@@ -1,43 +1,33 @@
 package Web::Magic;
 
 use 5.010;
-use common::sense;
+use strict;
+use warnings;
+no warnings qw(uninitialized once void);
 use namespace::sweep; # namespace::autoclean breaks overloading
 use Object::AUTHORITY;
 use Object::Stash qw/_stash/;
 use Object::Tap;
-use PerlX::Perform;
 use utf8;
 
 BEGIN {
 	$Web::Magic::AUTHORITY = 'cpan:TOBYINK';
-	$Web::Magic::VERSION   = '0.008';
+	$Web::Magic::VERSION   = '0.009';
 }
 
 use HTTP::Date 0                   qw//;
 use HTTP::Response 0               qw//;
 use HTTP::Request 0                qw//;
 use HTTP::Request::Common 5.0      qw//;
-use JSON::JOM 0.501                qw/to_jom from_json to_json/;
-use JSON::JOM::Plugins::Dumper 0   qw//;
-use JSON::JOM::Plugins::JsonPath 0 qw//;
 use LWP::UserAgent 0               qw//;
 use PerlX::QuoteOperator 0.04      qw//;
-use Scalar::Util 0                 qw/blessed/;
-use Sub::Name 0                    qw/subname/;
+use Scalar::Util 0                 qw/ blessed /;
 use URI 0                          qw//;
-use URI::Escape 0                  qw/uri_escape/;
-use YAML::Any 0                    qw/Load Dump/;
+use URI::Escape 0                  qw/ uri_escape /;
 
-use overload
-	'%{}'  => \&to_hashref,
-	'@{}'  => \&to_hashref,
-	'""'   => \&content,
-	;
+use overload q[""] => \&content;
 
-use constant {
-	NAMESPACE_XHTML   => 'http://www.w3.org/1999/xhtml',
-	};
+use constant NAMESPACE_XHTML => 'http://www.w3.org/1999/xhtml';
 
 our %Exceptions;
 BEGIN
@@ -45,6 +35,9 @@ BEGIN
 	%Exceptions = (
 		'Web::Magic::Exception' => {
 			description => 'a general Web::Magic error has occurred',
+			},
+		'Web::Magic::Exception::Feature' => {
+			description => 'Web::Magic is missing a feature',
 			},
 		'Web::Magic::Exception::BadPhase' => {
 			isa         => 'Web::Magic::Exception',
@@ -116,82 +109,67 @@ BEGIN
 	}
 }
 
-my %F;
+our (%HANDLER, @SPELLBOOK);
 BEGIN {
-	$F{$_} = 'to_dom'
-		foreach qw/getElementsByTagName getElementsByTagNameNS
-			getElementsByLocalName getElementsById documentElement
-			cloneNode firstChild lastChild findnodes find findvalue
-			exists childNodes attributes getNamespaces
-			querySelector querySelectorAll/;
-	$F{$_} = 'to_model'
-		foreach qw/subjects predicates objects objects_for_predicate_list
-			get_pattern get_statements count_statements get_sparql as_stream/;
-	$F{$_} = 'to_feed'
-		foreach qw/entries/;
-	$F{$_} = 'response'
-		foreach qw/headers/;
-	$F{$_} = 'headers'
-		foreach qw/header/;
-	$F{$_} = 'uri'
-		foreach qw/scheme authority path query host port/;
-	$F{$_} = 'acme_24'
-		foreach qw/random_jackbauer_fact/;
+	$HANDLER{$_} = 'response' for qw/headers/;
+	$HANDLER{$_} = 'headers'  for qw/header/;
+	$HANDLER{$_} = 'uri'      for qw/scheme authority path query host port/;
 }
 
-our %XPaths;
-BEGIN {
-	my $thingsWithSrc = '(local-name()="img" or local-name()="video" or local-name()="audio" or local-name()="source" or local-name()="script") and @src';
-	%XPaths = (
-		'~links'     => '//*[(local-name()="a" or local-name()="area" or local-name()="link") and @href]',
-		'~images'    => '//*[local-name()="img" and @src]',
-		'~resources' => "//*[($thingsWithSrc) or (local-name()=\"object\" and \@data)]",
-		);
-}
+require Web::Magic::Spellbook::XML;
+require Web::Magic::Spellbook::JSON;
+require Web::Magic::Spellbook::Feeds;
+require Web::Magic::Spellbook::RDF;
+require Web::Magic::Spellbook::Acme;
 
 sub import
 {
-	my ($class, %args) = @_;
+	my ($class, @args) = @_;
+	
+	if ($0 eq q<-e> and caller eq 'main' and not @args)
+	{
+		@args = (
+			-sub     => [qw/web/],
+			-feature => [qw/XML JSON Feeds RDF/],
+		);
+	}
 	
 	my $caller = caller;
 	
-	unless (exists $args{-util} and not $args{-util})
+	while (@args)
 	{
-		require Web::Magic::Util;
+		my ($arg, $val) = (shift @args, shift @args);
+		$val = [$val] unless ref $val;
+		
+		if ($arg eq '-quotelike')
+		{
+			my $code = sub ($) { $class->new(@_) };
+			my $ctx  = PerlX::QuoteOperator->new;
+			$ctx->import(
+				$_,
+				{ -emulate => 'qq', -with => $code, -parser => 1},
+				$caller,
+			) for @$val;
+		}
+		
+		elsif ($arg eq '-sub')
+		{
+			no strict 'refs';
+			my $code = sub ($;$%) { $class->new(@_) };
+			*{"$caller\::$_"} = $code for @$val;
+		}
+		
+		elsif ($arg eq '-feature')
+		{
+			for (@$val)
+			{
+				next if $_ ~~ @SPELLBOOK;
+				Web::Magic::Exception::Feature->throw(
+					message => "Missing feature: $_\n",
+				);
+			}
+		}
 	}
-	
-	if ($args{-quotelike})
-	{
-		my $code   = sub ($) { $class->new(@_); };
-		
-		$args{-quotelike} = [ $args{-quotelike} ]
-			unless ref $args{-quotelike};
-		
-		my $ctx    = PerlX::QuoteOperator->new;
-		$ctx->import(
-			$_,
-			{ -emulate => 'qq', -with => $code, -parser => 1},
-			$caller,
-			)
-			foreach @{ $args{-quotelike} };
-	}
-	
-	if ($args{-sub})
-	{
-		my $code   = sub ($;$%) { $class->new(@_); };
-		
-		$args{-sub} = [ $args{-sub} ]
-			unless ref $args{-sub};
-		
-		no strict 'refs';
-		*{"$caller\::$_"} = subname "$caller\::$_", $code
-			foreach @{ $args{-sub} };
-	}
-}
-
-sub AUTHORITY
-{
-	goto &Object::AUTHORITY::AUTHORITY;
 }
 
 sub new
@@ -203,12 +181,12 @@ sub new
 	{
 		$method = shift;
 	}
-
+	
 	if (blessed $_[0] and $_[0]->isa('HTTP::Request'))
 	{
 		return $class->_http_request_to_uri($method, $_[0]);
 	}
-
+	
 	unshift @_, $class->_blessed_thing_to_uri(shift);
 	
 	my ($u, %args) = map {"$_"} @_; # stringify
@@ -234,7 +212,7 @@ sub new_from_data
 		unless @data;
 	Web::Magic::Exception->throw("Invalid media type: $media_type\n")
 		unless $media_type =~ m{^ \w+ / \S+ $}x;
-
+	
 	my $uri = URI->new('data:');
 	$uri->media_type($media_type);
 	$uri->data(join '', @data);
@@ -248,8 +226,12 @@ sub _http_request_to_uri
 	Web::Magic::Exception->throw("Given explicit HTTP method which contradicts method in HTTP::Request object\n")
 		if defined $explicit_method && $request->method ne $explicit_method;
 		
-	my $self = $class->new(uc($request->method), $request->uri);	
-	perform { $self->set_request_body($_) } wherever $request->content;
+	my $self = $class->new(uc($request->method), $request->uri);
+	for ($request->content)
+	{
+		next unless defined;
+		$self->set_request_body($_);
+	}
 	
 	foreach my $h ($request->header_field_names)
 	{
@@ -316,7 +298,12 @@ sub __autoload
 {
 	my ($starting_class, $func, $self, @arguments) = @_;
 	
-	if (defined (my $via = $F{$func}))
+	if ($func eq 'AUTHORITY')
+	{
+		# why needy this??
+		return \&Object::AUTHORITY::AUTHORITY;
+	}
+	elsif (defined (my $via = $HANDLER{$func}))
 	{
 		return
 			sub { (shift)->$via()->$func(@_) }
@@ -356,7 +343,7 @@ sub AUTOLOAD
 	if (1) # if we ever start to vary autoloaded methods on a per-object basis,
 	{      # need to turn this off.
 		no strict 'refs';
-		*{$method} = subname $method => $ref;
+		*{$method} = $ref;
 	}
 	
 	goto &$ref;
@@ -369,7 +356,7 @@ sub __deferred_load
 	# Here we enforce that this method can only be called locally.
 	my @caller = caller;
 	die "not allowed"
-		unless $caller[0] eq __PACKAGE__ && $caller[1] eq __FILE__;
+		unless $caller[0] eq __PACKAGE__;
 	
 	while (@_)
 	{
@@ -815,178 +802,6 @@ sub _cancel_progress
 	# no-op
 }
 
-sub to_hashref
-{
-	my ($self) = @_;
-	my $stash = $self->_stash;
-
-	unless (exists $stash->{hashref})
-	{
-		$self->do_request(Accept => 'application/json, application/yaml, text/yaml');
-		
-		if ($self->headers->content_type =~ /json/i)
-		{
-			$stash->{hashref} = from_json($self->response->decoded_content);
-		}
-		elsif ($self->headers->content_type =~ /yaml/i)
-		{
-			$stash->{hashref} = to_jom(Load($self->response->decoded_content));
-		}
-		else
-		{
-			$self->_cancel_progress;
-			Web::Magic::Exception::BadReponseType->throw(
-				message      => "Can't treat this media type as a hashref: "
-				              . $self->headers->content_type . "\n",
-				content_type => $self->headers->content_type,
-				);
-		}
-	}
-	
-	return $stash->{hashref};
-}
-
-sub json_findnodes
-{
-	my ($self, $path) = @_;
-	return $self->to_hashref->findNodes($path);
-}
-
-sub to_dom
-{
-	my ($self, $upgrade) = @_;
-	my $stash = $self->_stash;
-
-	$self->__deferred_load(
-		'HTML::HTML5::Parser'        => '0.100',
-		'HTML::HTML5::Writer'        => '0.100',
-		'XML::LibXML'                => '1.70',
-		'XML::LibXML::QuerySelector' => 0,
-		);
-
-	unless (exists $stash->{dom})
-	{
-		$self->do_request(Accept => 'application/xml, text/xml, application/atom+xml, application/xhtml+xml, text/html');
-		
-		if ($self->headers->content_type =~ m{^text/html}i)
-		{
-			$stash->{dom} = HTML::HTML5::Parser
-				->new->parse_string($self->response->decoded_content);
-		}
-		elsif ($self->headers->content_type =~ m{xml}i)
-		{
-			$stash->{dom} = XML::LibXML
-				->new->parse_string($self->response->decoded_content, 
-					($self->response->base // $$self));
-		}
-		else
-		{
-			$self->_cancel_progress;
-			Web::Magic::Exception::BadReponseType->throw(
-				message      => "Can't treat this media type as a DOM: "
-				              . $self->headers->content_type . "\n",
-				content_type => $self->headers->content_type,
-				);
-		}
-		
-		$stash->{dom}->setURI( $self->response->base // $$self );
-	}
-	
-	if ($upgrade)
-	{
-		Web::Magic::Exception::BadReponseType->throw(
-			message => "Need to upgrade DOM, but XML::LibXML::Augment not loaded\n",
-			) unless UNIVERSAL::can('XML::LibXML::Augment', 'can')
-			      && XML::LibXML::Augment->can('rebless');
-		XML::LibXML::Augment->rebless($stash->{dom});
-	}
-	
-	return $stash->{dom};
-}
-
-sub findnodes
-{
-	my ($self, $xpath, @etc) = @_;
-	
-	if ($xpath =~ qr{^ ~ \w+ $}x and exists $XPaths{$xpath})
-	{
-		$xpath = $XPaths{$xpath};
-	}
-	
-	return $self->to_dom->findnodes($xpath, @etc);
-}
-
-sub _rdfa_stuff
-{
-	my ($self) = @_;
-	my $stash = $self->_stash;
-
-	$self->__deferred_load(
-		'RDF::RDFa::Parser'    => '1.096',
-		);
-
-	unless (exists $stash->{rdfa})
-	{
-		$stash->{rdfa} = RDF::RDFa::Parser->new_from_url($self->response);
-		$stash->{rdfa}->consume;
-	}
-	
-	return $stash->{rdfa};
-}
-
-sub to_model
-{
-	my ($self) = @_;
-	my $stash = $self->_stash;
-
-	$self->__deferred_load(
-		'RDF::RDFa::Parser'    => '1.096',
-		'RDF::Trine'           => '0.135',
-		);
-
-	unless (exists $stash->{model})
-	{
-		$self->do_request(Accept => 'application/rdf+xml, text/turtle, application/xhtml+xml;q=0.1');
-		
-		if (defined RDF::RDFa::Parser::Config->host_from_media_type($self->headers->content_type))
-		{
-			$stash->{model} = $self->_rdfa_stuff->graph;
-		}
-		else
-		{
-			my $model = RDF::Trine::Model->new;
-			
-			RDF::Trine::Parser
-				->parser_by_media_type($self->headers->content_type)
-				->parse_into_model(
-					($self->response->base//$$self),
-					$self->response->decoded_content,
-					$model,
-					);
-			$stash->{model} = $model;
-		}
-	}
-	
-	return $stash->{model};
-}
-
-sub to_feed
-{
-	my ($self) = @_;
-	my $stash = $self->_stash;
-	
-	$self->__deferred_load('XML::Feed' => 0);
-	
-	unless (exists $stash->{feed})
-	{
-		my $response = $self->response(Accept => 'application/atom+xml, application/rss+xml, application/rdf+xml;q=0.1');
-		my $content  = $response->decoded_content;
-		$stash->{feed} = XML::Feed->parse(\$content);
-	}
-	
-	return $stash->{feed};
-}
-
 sub content
 {
 	my ($self) = @_;
@@ -1010,13 +825,6 @@ sub cancel
 	
 	$self->_stash->{cancel_request} = [ caller(0) ];
 	return $self;
-}
-
-sub acme_24
-{
-	my ($self) = @_;
-	$self->__deferred_load('Acme::24' => '0.03');
-	return 'Acme::24';
 }
 
 sub is_cancelled
@@ -1080,89 +888,7 @@ sub DESTROY
 	$self->do_request;
 }
 
-sub make_absolute_urls
-{
-	my ($self, $xpc, @xpaths) = @_;
-	
-	unless (@xpaths)
-	{
-		if ($self->header('Content-Type') =~ /html/i)
-		{
-			@xpaths = qw(
-				//xhtml:*/@href
-				//xhtml:*/@src
-				//xhtml:*/@cite
-				//xhtml:form/@action
-				//xhtml:object/@data
-				//xhtml:a/@ping
-				//xhtml:img/@longdesc
-				//xhtml:img/@lowsrc
-				//xhtml:video/@poster
-				);
-		}
-	}
-	
-	return $self unless @xpaths;
-	
-	my $dom; eval { $dom = $self->to_dom };
-	return $self unless $dom;
-	
-	unless ($xpc)
-	{
-		$xpc = XML::LibXML::XPathContext->new;
-		$xpc->registerNs(xhtml => NAMESPACE_XHTML)
-			if $self->header('Content-Type') =~ /html/i;
-	}
-	
-	$xpc->setContextNode($dom) unless $xpc->getContextNode;
-	
-	my @nodes = map { my @n = $xpc->findnodes($_); @n; } @xpaths;
-	
-	foreach my $node (@nodes)
-	{
-		my $base = $node->baseURI // $dom->URI;
-		
-		if ($node->isa('XML::LibXML::Attr'))
-		{
-			my $uri = URI->new_abs($node->getValue, $base);
-			$node->setValue("$uri");
-		}
-		elsif ($node->isa('XML::LibXML::Text'))
-		{
-			my $uri = URI->new_abs($node->data, $base);
-			$node->setData("$uri");
-		}
-	}
-	
-	return $self;
-}
-
-sub opengraph
-{
-	my ($self) = @_;
-	my $return;
-	
-	local $@ = undef;
-	eval
-	{
-		my $rdfa = $self->_rdfa_stuff;
-		foreach my $property ($rdfa->opengraph)
-		{
-			$return->{$property} = $rdfa->opengraph($property)
-		}
-		1;
-	}
-	or do
-	{
-		warn $@;
-		return {};
-	};
-		
-	$return;
-}
-
 'Just DWIM!'
-
 __END__
 
 =head1 NAME
@@ -1171,12 +897,12 @@ Web::Magic - HTTP dwimmery
 
 =head1 SYNOPSIS
 
- use Web::Magic;
+ use Web::Magic -feature => 'JSON';
  say Web::Magic->new('http://json-schema.org/card')->{description};
 
 or
 
- use Web::Magic -sub => 'W'; 
+ use Web::Magic -sub => 'W', -feature => 'JSON';
  say W('http://json-schema.org/card')->{description};
 
 =head1 DESCRIPTION
@@ -1259,6 +985,15 @@ The quote-like operator does support interpolation, but requires the
 entire URL to be on one line (not that URLs generally contain line breaks).
 
 No shortcut is provided for C<new_from_data>.
+
+In Perl one-liners (that is, using the "-e" or "-E" command-line options),
+C<< use Web::Magic -sub => 'web' >> is automatically exported into
+C<main>. So this works:
+
+ perl -MWeb::Magic -E'web(q<http://example.com/>) \
+   -> make_absolute_urls \
+   -> findnodes("~links") \
+   -> foreach(sub { say $_->{href} })'
 
 =head2 Pre-Request Methods
 
@@ -1456,6 +1191,12 @@ A response header, as a string. This is a shortcut for:
 
 Parses the response body as XML or HTML (depending on Content-Type
 header) and returns the result as an XML::LibXML::Document.
+
+If L<XML::LibXML::Augment> is installed and already loaded, then this
+method will also call C<< XML::LibXML::Augment->rebless >> on the
+resultant DOM tree. In particular, if L<HTML::HTML5::DOM> is already
+loaded, this will supplement XML::LibXML's existing XML DOM support
+with most of the HTML5 DOM.
 
 When C<to_dom> is called on an unrequested Web::Magic object,
 it implicitly sets the HTTP Accept header to include XML and HTML
@@ -2048,7 +1789,7 @@ At first glance, Web::Magic seems a little chaotic...
     ->User_Agent('MyExample/0.1')
     ->GET
     ->make_absolute_urls
-    ->querySelectorAll('a[rel="stylesheet"]')
+    ->querySelectorAll('link[rel="stylesheet"]')
     ->foreach(sub{ say $_->{href} })
 
 But there is actually a logic to it.
@@ -2100,19 +1841,43 @@ is a subclass of LWP::UserAgent:
 
  local $Web::Magic::user_agent = WWW::Mechanize->new(...);
 
+=head2 Use with HTML::HTML5::DOM
+
+L<HTML::HTML5::DOM> is not a dependency of Web::Magic, but if it's available,
+then calling the C<to_dom> method on an HTML Web::Magic object will return an
+L<HTML::HTML5::DOM::HTMLDocument> object.
+
+=head2 Why does Web::Magic have so many dependencies?
+
+Mostly because it has so many features but I don't like to reinvent the wheel.
+
+Web::Magic does quite a lot, and if you're only using a small part of its
+functionality, then this list of dependencies may seem daunting. (However,
+it's worth noting that many of the dependencies aren't loaded until they're
+needed.)
+
+That said, there is work underway to split some of the current functionality
+out into plugins. It is strongly suggested that you indicate which features
+you are using on import. This will help you avoid surprises when the splits
+start.
+
+  use Web::Magic -feature => [qw( JSON RDF )];
+
+Currently valid feature names are: C<HTML>, C<XML>, C<JSON>, C<YAML>, C<RDF>,
+C<Feeds> and C<Acme>. They should be considered case-sensitive.
+
 =head1 TODO
 
 =over
+
+=item * Reduce dependencies.
+
+See the NOTES above.
 
 =item * Make non HTTP Basic authentication easier.
 
 For example, HTTP Digest auth, WebID. OAuth might be within this scope,
 but probably not.
-
-=item * Integration with HTML::HTML5::DOM.
-
-H:H5:DOM isn't released yet, but once it is, it should enable some
-pretty awesome stuff.
 
 =back
 
@@ -2130,7 +1895,7 @@ L<Web::Magic::Async>.
 L<LWP::UserAgent>, L<URI>, L<HTTP::Request>, L<HTTP::Response>.
 
 L<XML::LibXML>, L<XML::LibXML::QuerySelector>, L<JSON::JOM>, L<RDF::Trine>,
-L<XML::Feed>.
+L<XML::Feed>, L<XML::LibXML::Augment>, L<HTML::HTML5::DOM>.
 
 =head1 AUTHOR
 

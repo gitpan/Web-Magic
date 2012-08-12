@@ -10,7 +10,9 @@ your script:
  use 5.010;
  use strict;
  use utf8::all;
- use Web::Magic -quotelike => 'web';
+ use Web::Magic
+   -quotelike => 'web',
+   -feature   => [qw(HTML XML RDF JSON YAML Feeds)];
 
 =head1 WEB::MAGIC VERSUS MECH
 
@@ -236,6 +238,36 @@ to point to the Web::Magic object. Then the Web::Magic object itself is
 returned so that C<tap> can be chained.
 
 Arguably this takes chaining too far. ;-)
+
+=head2 Modifying a document with WebDAV
+
+Simple example of downloading an existing HTML document, using the DOM to
+modify it, and then re-upload it via HTTP PUT.
+
+  my $doc = Web::Magic
+    -> new('http://example.com/mydoc.html')
+    -> to_dom;
+  
+  $doc->querySelector('div#footer')->appendText($disclaimer);
+  
+  Web::Magic
+    -> new('http://example.com/mydoc.html')
+    -> PUT($doc)
+    -> Content_Type('text/html');
+
+Another example. Here we download JSON, add some data and re-upload in YAML
+to a different server.
+
+  my $data = Web::Magic
+    -> new('http://tobyink.example.com/me.json')
+    -> to_hashref;
+  
+  push @{ $data->{tel} }, $phone_number;
+  
+  Web::Magic
+    -> new('http://team.example.com/tobyink.yaml')
+    -> PUT($data)
+    -> Content_Type('text/x-yaml');
 
 =head2 POSTing data
 

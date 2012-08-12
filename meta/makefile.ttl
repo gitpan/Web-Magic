@@ -12,36 +12,28 @@
 	:test_requires
 		"Test::Exception 0",
 		"Test::More 0.61";
-	:recommends
-		"XML::LibXML 1.93";
 	:requires
-		"common::sense",
 		"namespace::sweep",
-		"utf8",
 		"Acme::24 0.03",
 		"AnyEvent::HTTP 2.13",
 		"Exception::Class 1.32",
 		"HTML::HTML5::Parser 0.100",
 		"HTML::HTML5::Writer 0.100",
 		"HTTP::Date 0",
-		"HTTP::Response 0",
-		"HTTP::Request 0",
+		"HTTP::Message 0",
 		"JSON::JOM 0.005",
 		"JSON::JOM::Plugins::JsonPath 0",
 		"LWP::UserAgent 0",
 		"Object::AUTHORITY 0",
 		"Object::Stash 0.001",
 		"Object::Tap 0",
-		"PerlX::Perform 0",
 		"PerlX::QuoteOperator 0.04",
-		"RDF::RDFa::Parser 1.096",
+		"RDF::RDFa::Parser 1.097",
 		"RDF::Trine 0.135",
-		"Scalar::Util 0",
-		"Sub::Name 0",
 		"URI 0",
 		"URI::Escape 0",
 		"XML::Feed 0",
-		"XML::LibXML 1.70",
+		"XML::LibXML 1.94",
 		"XML::LibXML::QuerySelector 0",
 		"YAML::Any 0".
 

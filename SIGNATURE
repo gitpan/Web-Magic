@@ -1,5 +1,5 @@
 This file contains message digests of all files listed in MANIFEST,
-signed via the Module::Signature module, version 0.66.
+signed via the Module::Signature module, version 0.68.
 
 To verify the content in this distribution, first make sure you have
 Module::Signature installed, then type:
@@ -14,12 +14,12 @@ not run its Makefile.PL or Build.PL.
 -----BEGIN PGP SIGNED MESSAGE-----
 Hash: SHA1
 
-SHA1 f7bcf7f998ef72870f5718c2b80650894f43a3d1 Changes
-SHA1 1d54db0b8134eb1c8ea0cee400f9dc612bcaa61a LICENSE
-SHA1 ef335fcadeaece93cc1aad7dc15c418aa2828326 MANIFEST
-SHA1 4ae43fa1d84f84d3dd7806a86b98ded98f291029 META.yml
+SHA1 4e3d24faf67ab656718c73844ce92472563292ad Changes
+SHA1 cc087c3dd6e1b519c680e68cd0231735a68300a0 LICENSE
+SHA1 92557f7c7ca10f3816fe00b6e572e73ba8c49991 MANIFEST
+SHA1 cc61eab9045c2c47e18a9876c8f7c10d01606880 META.yml
 SHA1 80519f46cf4d005b59c73d680d3f90aef176d9bd Makefile.PL
-SHA1 b6f939aedba2deebb47a6c29c01cb5fc1be1ee29 README
+SHA1 14797c5799bd50aa2bf5f5a0cd0076a14a9bb4a9 README
 SHA1 81d7fb60a0acf519fefddabb2b203bdc02e60496 examples/absolutize.pl
 SHA1 ab55fa240bb84e021ba09bde5e4dbd9718537e06 examples/absolutize2.pl
 SHA1 769575bddad1894cf0a452c926cb768a080b34f1 examples/assert-async.pl
@@ -29,34 +29,39 @@ SHA1 87fb0687e7d57ed244659090a488b3ed4cf9ddc1 examples/opengraph.pl
 SHA1 e2620799238b92cb154de81d6e3547acc5e45eb1 examples/quote-like.pl
 SHA1 fffc86fb66a75b2e30f58b121fae21302cc00f7f examples/stuff.pl
 SHA1 4b144ff9eef9ff5579174a5dfc188e6df7e22adb examples/tap.pl
-SHA1 5d94bc10deff1dd74e4bc5dfa6fc015e39271f15 inc/Module/AutoInstall.pm
-SHA1 40106479d4e07f379cb82ca1d69fca92e3a40f47 inc/Module/Install.pm
-SHA1 34a24a530ecf0365cc02e4150b06c9bed702a441 inc/Module/Install/AutoInstall.pm
+SHA1 06c410f05488c1612ed66b06d3a86b2580581e4a inc/Module/AutoInstall.pm
+SHA1 8a924add836b60fb23b25c8506d45945e02f42f4 inc/Module/Install.pm
+SHA1 61ab1dd37e33ddbe155907ce51df8a3e56ac8bbf inc/Module/Install/AutoInstall.pm
 SHA1 c04f94f91fa97b9f8cfb5a36071098ab0e6c78e3 inc/Module/Install/AutoManifest.pm
-SHA1 ae8aa01a73cb83da31c39e8eed1120c59cb530a1 inc/Module/Install/Base.pm
-SHA1 5c87d2d0e2c08b5173259006c88ad81c24303f9d inc/Module/Install/Can.pm
-SHA1 98daf9d8c50b4b7e8988cf1fa2b86044ad219533 inc/Module/Install/Fetch.pm
-SHA1 f3e008113f7f49b0625083b6cc358a312854f613 inc/Module/Install/Include.pm
-SHA1 e67589fcbacdda6c98ff34d8e26a004ab0467bdc inc/Module/Install/Makefile.pm
-SHA1 209ea405d4ab94475661bb450d0ea042d2ec25b5 inc/Module/Install/Metadata.pm
+SHA1 2d0fad3bf255f8c1e7e1e34eafccc4f595603ddc inc/Module/Install/Base.pm
+SHA1 f0e01fff7d73cd145fbf22331579918d4628ddb0 inc/Module/Install/Can.pm
+SHA1 7328966e4fda0c8451a6d3850704da0b84ac1540 inc/Module/Install/Fetch.pm
+SHA1 66d3d335a03492583a3be121a7d888f63f08412c inc/Module/Install/Include.pm
+SHA1 b62ca5e2d58fa66766ccf4d64574f9e1a2250b34 inc/Module/Install/Makefile.pm
+SHA1 1aa925be410bb3bfcd84a16985921f66073cc1d2 inc/Module/Install/Metadata.pm
 SHA1 3b9281ddf7dd6d6f5de0a9642c69333023193c80 inc/Module/Install/Package.pm
-SHA1 b86d0385e10881db680d28bde94f275e49e34a27 inc/Module/Install/TrustMetaYml.pm
-SHA1 1326052d1df1065debee74f9d8583a734b9b3d00 inc/Module/Install/Win32.pm
-SHA1 bb607f3715c40fc3bc1c46496587cdb215bc4fa2 inc/Module/Install/WriteAll.pm
+SHA1 9de7b5129351499c048328dfa718d0eab557cf30 inc/Module/Install/TrustMetaYml.pm
+SHA1 e4196994fa75e98bdfa2be0bdeeffef66de88171 inc/Module/Install/Win32.pm
+SHA1 c3a6d0d5b84feb3280622e9599e86247d58b0d18 inc/Module/Install/WriteAll.pm
 SHA1 26d58a041cd6b3d21db98b32e8fd1841aae21204 inc/Module/Package.pm
-SHA1 6b807287940754cc31a3db59f2b22e363d5525be inc/Module/Package/Dist/RDF.pm
-SHA1 e31c281782183601e1e057c5914f63269e043932 inc/Scalar/Util.pm
-SHA1 5eae2f71c45a996a296d2445b18d0589307111f0 inc/Scalar/Util/PP.pm
-SHA1 eef6bff62046bff2ce08ba132d0b58fba30f40b4 inc/YAML/Tiny.pm
-SHA1 7b8ee9a10b5926405230400fa2e8771b05a23d29 lib/Web/Magic.pm
-SHA1 9260e367cc79a369acaf540028755766b5ec2c93 lib/Web/Magic/Async.pm
-SHA1 49d35545a2573ebfad2cf281fdea266095eaf823 lib/Web/Magic/Examples.pod
-SHA1 ed92d19c30b4f1a1a221bd300733874f463fbbc7 lib/Web/Magic/Util.pm
-SHA1 a7af19fc4447fa503464e44e77524c98b040ab81 meta/changes.ttl
+SHA1 c18deb3025b83dda8ac7c97f1e29599e1d2c7378 inc/Module/Package/Dist/RDF.pm
+SHA1 0e0eed2e69d9583081868cf4f220068d0a018568 inc/Scalar/Util.pm
+SHA1 feb933cefe2e3762e8322bd6071a2499f3440da1 inc/YAML/Tiny.pm
+SHA1 8105c0510a773b56840995fb4dd2dc64fe9ddaee inc/unicore/Name.pm
+SHA1 36df501c7c9b73c282c5174ed54d8283b2f2cbf2 inc/utf8.pm
+SHA1 c972007b6e768374aafb8c38d1f435866126d5ae lib/Web/Magic.pm
+SHA1 9c851171786eda5bd6cc1977f5502e7bbcb71ec4 lib/Web/Magic/Async.pm
+SHA1 423ace22c3b5ae8b81a8d49183ce15da97ce4a49 lib/Web/Magic/Examples.pod
+SHA1 5d30980d89ad129c0f32c2295a6a55f52680bc37 lib/Web/Magic/Spellbook/Acme.pm
+SHA1 3e4fee13699afc0eea63cdb2849afdd00db05bbd lib/Web/Magic/Spellbook/Feeds.pm
+SHA1 922c498557492d463760ca52b7efd84572b8ab67 lib/Web/Magic/Spellbook/JSON.pm
+SHA1 88add0e99e82a7b9289541a619a37ad6835bd1cc lib/Web/Magic/Spellbook/RDF.pm
+SHA1 e289d3d2601df1e0b81552ae05d7c3c3723622df lib/Web/Magic/Spellbook/XML.pm
+SHA1 d48ad520275922cd4e282cd1bb52350e767cc702 meta/changes.ttl
 SHA1 61d5ba4e60fc0a075f79d4cce4513e1f8fef5d73 meta/doap.ttl
-SHA1 fa22f07dd1ad4b227f6abc9e8c866952ea07aa99 meta/makefile.ttl
+SHA1 b700f8daa6d27a213dd3172224573b4afe0e2f9e meta/makefile.ttl
 SHA1 2906cae4fc3538ff6be648a2c51366aa7f73f478 t/01basic.t
-SHA1 3cc0daef70ca48ead41a304bb675e8f297d6e4c7 t/02http.t
+SHA1 1d46a52ebe38c9578c5007cb1d2127e00417385f t/02http.t
 SHA1 57ffab71cbe01c75ebaff455809a126288e4f9e3 t/03ua.t
 SHA1 1874454610518cc6ab7111c057d0fe69b8998e91 t/04datauri.t
 SHA1 8fa99c6d902fc5a1c94098c961272879c5b11667 t/05saveas.t
@@ -64,13 +69,14 @@ SHA1 0655f394cf0d726fb4ebeeca5670e8c91f29c1de t/06httpreq.t
 SHA1 b1bc2bc2315cd45a09a36bce13f11a5991160368 t/10data_tree.t
 SHA1 0cff78510a06f8d2433cdb6a50c4ff5a79bcf639 t/11data_dom.t
 SHA1 cf0b320e3dd2a276191c68ea809b853c9a2c9f87 t/12data_rdf.t
+SHA1 f305ee17322ee937c792b7027606f31fdc1bcb91 t/TODO
 SHA1 c145c4023e4f8a015b0110476aedd8deccac81e2 t/lib/Test/HTTP/Server.pm
 SHA1 aa2db235f0fffda64cc1508e844e8fad1184fe7d t/lib/TestHttpServer.pm
 SHA1 16f90a2a45ff02d92220c977067a55333fe24de7 t/run-test-server.pl
 -----BEGIN PGP SIGNATURE-----
 Version: GnuPG v1.4.10 (GNU/Linux)
 
-iEYEARECAAYFAk9Or8oACgkQzr+BKGoqfTmdcgCfZQrNWYJN6Idq/cmreOt/mAR2
-o0UAoKu/7dC1AsdsL1mo1QpjY+uq3p20
-=rUhq
+iEYEARECAAYFAlAn198ACgkQzr+BKGoqfTl7KACgh0kaZ0FVPS+Quh5KIzbaLoyy
+NOwAoKaPAGJWAI+YvEwPEuQ4LdKzLIv3
+=pWQ9
 -----END PGP SIGNATURE-----

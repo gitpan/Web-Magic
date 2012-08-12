@@ -7,7 +7,7 @@ use utf8;
 
 BEGIN {
 	$Web::Magic::Async::AUTHORITY = 'cpan:TOBYINK';
-	$Web::Magic::Async::VERSION   = '0.008';
+	$Web::Magic::Async::VERSION   = '0.009';
 }
 
 use AnyEvent::HTTP;

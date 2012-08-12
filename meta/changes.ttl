@@ -122,3 +122,15 @@ dist:v_0-008
 		dcs:item   [ rdfs:label "Add '~resources' shortcut to findnodes."@en ]
 		] .
 
+dist:project :release dist:v_0-009 .
+dist:v_0-009
+	a               :Version ;
+	dc:issued       "2012-08-12"^^xsd:date ;
+	:revision       "0.009"^^xsd:string ;
+	:file-release   <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Web-Magic-0.009.tar.gz> ;
+	dcs:changeset [
+		dcs:versus dist:v_0-008;
+		dcs:item   [ rdfs:label "Drop dependencies on common::sense and Sub::Name."@en ];
+		dcs:item   [ rdfs:label "Split certain features into separate modules, currently autoloaded, but in a future version will need to be explicitly loaded."@en ];
+		] .
+

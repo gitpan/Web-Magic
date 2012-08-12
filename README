@@ -2,12 +2,12 @@ NAME
     Web::Magic - HTTP dwimmery
 
 SYNOPSIS
-     use Web::Magic;
+     use Web::Magic -feature => 'JSON';
      say Web::Magic->new('http://json-schema.org/card')->{description};
 
     or
 
-     use Web::Magic -sub => 'W'; 
+     use Web::Magic -sub => 'W', -feature => 'JSON';
      say W('http://json-schema.org/card')->{description};
 
 DESCRIPTION
@@ -83,6 +83,15 @@ DESCRIPTION
     breaks).
 
     No shortcut is provided for "new_from_data".
+
+    In Perl one-liners (that is, using the "-e" or "-E" command-line
+    options), "use Web::Magic -sub => 'web'" is automatically exported into
+    "main". So this works:
+
+     perl -MWeb::Magic -E'web(q<http://example.com/>) \
+       -> make_absolute_urls \
+       -> findnodes("~links") \
+       -> foreach(sub { say $_->{href} })'
 
   Pre-Request Methods
     Constructing a Web::Magic object doesn't actually perform a request for
@@ -268,6 +277,12 @@ DESCRIPTION
     "to_dom"
         Parses the response body as XML or HTML (depending on Content-Type
         header) and returns the result as an XML::LibXML::Document.
+
+        If XML::LibXML::Augment is installed and already loaded, then this
+        method will also call "XML::LibXML::Augment->rebless" on the
+        resultant DOM tree. In particular, if HTML::HTML5::DOM is already
+        loaded, this will supplement XML::LibXML's existing XML DOM support
+        with most of the HTML5 DOM.
 
         When "to_dom" is called on an unrequested Web::Magic object, it
         implicitly sets the HTTP Accept header to include XML and HTML
@@ -798,7 +813,7 @@ NOTES
         ->User_Agent('MyExample/0.1')
         ->GET
         ->make_absolute_urls
-        ->querySelectorAll('a[rel="stylesheet"]')
+        ->querySelectorAll('link[rel="stylesheet"]')
         ->foreach(sub{ say $_->{href} })
 
     But there is actually a logic to it.
@@ -847,16 +862,39 @@ NOTES
 
      local $Web::Magic::user_agent = WWW::Mechanize->new(...);
 
+  Use with HTML::HTML5::DOM
+    HTML::HTML5::DOM is not a dependency of Web::Magic, but if it's
+    available, then calling the "to_dom" method on an HTML Web::Magic object
+    will return an HTML::HTML5::DOM::HTMLDocument object.
+
+  Why does Web::Magic have so many dependencies?
+    Mostly because it has so many features but I don't like to reinvent the
+    wheel.
+
+    Web::Magic does quite a lot, and if you're only using a small part of
+    its functionality, then this list of dependencies may seem daunting.
+    (However, it's worth noting that many of the dependencies aren't loaded
+    until they're needed.)
+
+    That said, there is work underway to split some of the current
+    functionality out into plugins. It is strongly suggested that you
+    indicate which features you are using on import. This will help you
+    avoid surprises when the splits start.
+
+      use Web::Magic -feature => [qw( JSON RDF )];
+
+    Currently valid feature names are: "HTML", "XML", "JSON", "YAML", "RDF",
+    "Feeds" and "Acme". They should be considered case-sensitive.
+
 TODO
+    *   Reduce dependencies.
+
+        See the NOTES above.
+
     *   Make non HTTP Basic authentication easier.
 
         For example, HTTP Digest auth, WebID. OAuth might be within this
         scope, but probably not.
-
-    *   Integration with HTML::HTML5::DOM.
-
-        H:H5:DOM isn't released yet, but once it is, it should enable some
-        pretty awesome stuff.
 
 BUGS
     Inumerable, almost certainly.
@@ -870,7 +908,7 @@ SEE ALSO
     LWP::UserAgent, URI, HTTP::Request, HTTP::Response.
 
     XML::LibXML, XML::LibXML::QuerySelector, JSON::JOM, RDF::Trine,
-    XML::Feed.
+    XML::Feed, XML::LibXML::Augment, HTML::HTML5::DOM.
 
 AUTHOR
     Toby Inkster <tobyink@cpan.org>.

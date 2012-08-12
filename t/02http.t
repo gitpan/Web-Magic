@@ -7,9 +7,10 @@ use Test::Exception;
 use Scalar::Util qw/refaddr/;
 use TestHttpServer;
 
-plan tests => 11;
+plan tests => 12;
 
 my $json = W( baseuri('ex_json') );
+isa_ok $json => 'Web::Magic';
 
 ok(!$json->is_requested, "request is deferred");
 is(refaddr($json->do_request), refaddr($json), 'do_request can be chained');
